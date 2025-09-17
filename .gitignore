@@ -1,0 +1,37 @@
+ # Rust build artifacts
+/target/
+Cargo.lock
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+ # Blockchain data
+blockchain_data/
+*.db
+*.mdb
+
+# ZK ceremony files (too large for git)
+zkp_params/
+trusted_setup/
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+validator_keys.json
+network_config.toml

@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1200" height="900" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="1200" height="900" fill="#f8f9fa"/>
+
+  <!-- Title -->
+  <text x="600" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#2c3e50">
+    SP CDR Reconciliation Blockchain Architecture
+  </text>
+
+  <!-- Layer 1: Telecom Operators -->
+  <rect x="50" y="60" width="1100" height="120" rx="10" fill="#e3f2fd" stroke="#1976d2" stroke-width="2"/>
+  <text x="80" y="85" font-size="16" font-weight="bold" fill="#1976d2">TELECOM OPERATORS</text>
+
+  <!-- Individual Operators -->
+  <rect x="80" y="100" width="200" height="60" rx="5" fill="white" stroke="#1976d2"/>
+  <text x="180" y="125" text-anchor="middle" font-size="12" font-weight="bold">T-Mobile Germany</text>
+  <text x="180" y="145" text-anchor="middle" font-size="10">ZK Prover + CDR</text>
+
+  <rect x="300" y="100" width="200" height="60" rx="5" fill="white" stroke="#1976d2"/>
+  <text x="400" y="125" text-anchor="middle" font-size="12" font-weight="bold">Vodafone UK</text>
+  <text x="400" y="145" text-anchor="middle" font-size="10">ZK Prover + CDR</text>
+
+  <rect x="520" y="100" width="200" height="60" rx="5" fill="white" stroke="#1976d2"/>
+  <text x="620" y="125" text-anchor="middle" font-size="12" font-weight="bold">Orange France</text>
+  <text x="620" y="145" text-anchor="middle" font-size="10">ZK Prover + CDR</text>
+
+  <rect x="740" y="100" width="200" height="60" rx="5" fill="white" stroke="#1976d2"/>
+  <text x="840" y="125" text-anchor="middle" font-size="12" font-weight="bold">Other SPs</text>
+  <text x="840" y="145" text-anchor="middle" font-size="10">ZK Prover + CDR</text>
+
+  <!-- Arrows from operators -->
+  <line x1="180" y1="160" x2="180" y2="200" stroke="#2c3e50" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="400" y1="160" x2="400" y2="200" stroke="#2c3e50" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="620" y1="160" x2="620" y2="200" stroke="#2c3e50" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="840" y1="160" x2="840" y2="200" stroke="#2c3e50" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Layer 2: API Layer -->
+  <rect x="50" y="200" width="1100" height="80" rx="10" fill="#fff3e0" stroke="#f57c00" stroke-width="2"/>
+  <text x="80" y="225" font-size="16" font-weight="bold" fill="#f57c00">API LAYER</text>
+
+  <rect x="100" y="235" width="180" height="35" rx="5" fill="white" stroke="#f57c00"/>
+  <text x="190" y="255" text-anchor="middle" font-size="11">CDR Submission POST /cdr</text>
+
+  <rect x="300" y="235" width="180" height="35" rx="5" fill="white" stroke="#f57c00"/>
+  <text x="390" y="255" text-anchor="middle" font-size="11">Batch Status GET /batch</text>
+
+  <rect x="500" y="235" width="180" height="35" rx="5" fill="white" stroke="#f57c00"/>
+  <text x="590" y="255" text-anchor="middle" font-size="11">Settlement POST /settle</text>
+
+  <rect x="700" y="235" width="180" height="35" rx="5" fill="white" stroke="#f57c00"/>
+  <text x="790" y="255" text-anchor="middle" font-size="11">Explorer GET /blocks</text>
+
+  <!-- Arrow from API to Blockchain Integration -->
+  <line x1="600" y1="280" x2="600" y2="320" stroke="#2c3e50" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Layer 3: Blockchain Integration -->
+  <rect x="50" y="320" width="1100" height="80" rx="10" fill="#e8f5e8" stroke="#388e3c" stroke-width="2"/>
+  <text x="80" y="345" font-size="16" font-weight="bold" fill="#388e3c">BLOCKCHAIN INTEGRATION</text>
+
+  <rect x="150" y="355" width="200" height="35" rx="5" fill="lightgreen" stroke="#388e3c"/>
+  <text x="250" y="375" text-anchor="middle" font-size="11">CDR Processing &amp; Batching</text>
+
+  <rect x="400" y="355" width="200" height="35" rx="5" fill="lightgreen" stroke="#388e3c"/>
+  <text x="500" y="375" text-anchor="middle" font-size="11">Settlement Calculation</text>
+
+  <rect x="650" y="355" width="200" height="35" rx="5" fill="lightgreen" stroke="#388e3c"/>
+  <text x="750" y="375" text-anchor="middle" font-size="11">Multi-Signature Mgmt</text>
+
+  <!-- Arrow to Smart Contracts -->
+  <line x1="600" y1="400" x2="600" y2="440" stroke="#2c3e50" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Layer 4: Smart Contract Layer -->
+  <rect x="50" y="440" width="1100" height="100" rx="10" fill="#f3e5f5" stroke="#7b1fa2" stroke-width="2"/>
+  <text x="80" y="465" font-size="16" font-weight="bold" fill="#7b1fa2">SMART CONTRACT LAYER</text>
+
+  <rect x="200" y="480" width="600" height="25" rx="5" fill="white" stroke="#7b1fa2"/>
+  <text x="500" y="495" text-anchor="middle" font-size="12" font-weight="bold">CONTRACT VM (Stack-based Bytecode Execution)</text>
+
+  <rect x="150" y="510" width="180" height="25" rx="5" fill="lavender" stroke="#7b1fa2"/>
+  <text x="240" y="525" text-anchor="middle" font-size="10">CDR Privacy Contract</text>
+
+  <rect x="360" y="510" width="180" height="25" rx="5" fill="lavender" stroke="#7b1fa2"/>
+  <text x="450" y="525" text-anchor="middle" font-size="10">Settlement Contract</text>
+
+  <rect x="570" y="510" width="180" height="25" rx="5" fill="lavender" stroke="#7b1fa2"/>
+  <text x="660" y="525" text-anchor="middle" font-size="10">Multi-Party Validation</text>
+
+  <!-- Arrow to Crypto Layer -->
+  <line x1="600" y1="540" x2="600" y2="580" stroke="#2c3e50" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Layer 5: Cryptographic Layer -->
+  <rect x="50" y="580" width="1100" height="90" rx="10" fill="#ffebee" stroke="#d32f2f" stroke-width="2"/>
+  <text x="80" y="605" font-size="16" font-weight="bold" fill="#d32f2f">CRYPTOGRAPHIC LAYER</text>
+
+  <rect x="100" y="620" width="300" height="25" rx="5" fill="white" stroke="#d32f2f"/>
+  <text x="250" y="635" text-anchor="middle" font-size="11" font-weight="bold">ZK PROOF SYSTEM (arkworks/BN254)</text>
+
+  <rect x="450" y="620" width="300" height="25" rx="5" fill="white" stroke="#d32f2f"/>
+  <text x="600" y="635" text-anchor="middle" font-size="11" font-weight="bold">BLS SIGNATURE SYSTEM (BLS12-381)</text>
+
+  <rect x="120" y="650" width="120" height="15" rx="3" fill="mistyrose" stroke="#d32f2f"/>
+  <text x="180" y="660" text-anchor="middle" font-size="9">Settlement VK</text>
+
+  <rect x="260" y="650" width="120" height="15" rx="3" fill="mistyrose" stroke="#d32f2f"/>
+  <text x="320" y="660" text-anchor="middle" font-size="9">CDR Privacy VK</text>
+
+  <rect x="470" y="650" width="120" height="15" rx="3" fill="mistyrose" stroke="#d32f2f"/>
+  <text x="530" y="660" text-anchor="middle" font-size="9">Aggregate Sigs</text>
+
+  <rect x="610" y="650" width="120" height="15" rx="3" fill="mistyrose" stroke="#d32f2f"/>
+  <text x="670" y="660" text-anchor="middle" font-size="9">Threshold Sigs</text>
+
+  <!-- Arrow to Consensus -->
+  <line x1="600" y1="670" x2="600" y2="710" stroke="#2c3e50" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Layer 6: Consensus Layer -->
+  <rect x="50" y="710" width="1100" height="80" rx="10" fill="#e0f2f1" stroke="#00796b" stroke-width="2"/>
+  <text x="80" y="735" font-size="16" font-weight="bold" fill="#00796b">CONSENSUS LAYER (ALBATROSS)</text>
+
+  <rect x="150" y="750" width="160" height="30" rx="5" fill="lightcyan" stroke="#00796b"/>
+  <text x="230" y="765" text-anchor="middle" font-size="10">Micro Blocks (CDR Txns)</text>
+
+  <rect x="330" y="750" width="160" height="30" rx="5" fill="lightcyan" stroke="#00796b"/>
+  <text x="410" y="765" text-anchor="middle" font-size="10">Macro Blocks (Finality)</text>
+
+  <rect x="510" y="750" width="160" height="30" rx="5" fill="lightcyan" stroke="#00796b"/>
+  <text x="590" y="765" text-anchor="middle" font-size="10">Validator Set (SPs)</text>
+
+  <rect x="690" y="750" width="160" height="30" rx="5" fill="lightcyan" stroke="#00796b"/>
+  <text x="770" y="765" text-anchor="middle" font-size="10">Epoch Management</text>
+
+  <!-- Arrow to Storage -->
+  <line x1="600" y1="790" x2="600" y2="830" stroke="#2c3e50" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Layer 7: Storage Layer -->
+  <rect x="50" y="830" width="1100" height="60" rx="10" fill="#fff8e1" stroke="#f57f17" stroke-width="2"/>
+  <text x="80" y="855" font-size="16" font-weight="bold" fill="#f57f17">STORAGE LAYER (MDBX DATABASE)</text>
+
+  <rect x="200" y="865" width="120" height="20" rx="3" fill="lightyellow" stroke="#f57f17"/>
+  <text x="260" y="877" text-anchor="middle" font-size="9">Blockchain Data</text>
+
+  <rect x="340" y="865" width="120" height="20" rx="3" fill="lightyellow" stroke="#f57f17"/>
+  <text x="400" y="877" text-anchor="middle" font-size="9">Contract State</text>
+
+  <rect x="480" y="865" width="120" height="20" rx="3" fill="lightyellow" stroke="#f57f17"/>
+  <text x="540" y="877" text-anchor="middle" font-size="9">ZK Keys Storage</text>
+
+  <rect x="620" y="865" width="120" height="20" rx="3" fill="lightyellow" stroke="#f57f17"/>
+  <text x="680" y="877" text-anchor="middle" font-size="9">Operator Certs</text>
+
+  <!-- P2P Network (side panel) -->
+  <rect x="970" y="200" width="200" height="150" rx="10" fill="#e1f5fe" stroke="#0277bd" stroke-width="2"/>
+  <text x="1070" y="225" text-anchor="middle" font-size="14" font-weight="bold" fill="#0277bd">P2P NETWORK</text>
+
+  <!-- Network nodes -->
+  <circle cx="1020" cy="250" r="15" fill="lightblue" stroke="#0277bd"/>
+  <text x="1020" y="255" text-anchor="middle" font-size="8">N1</text>
+
+  <circle cx="1070" cy="250" r="15" fill="lightblue" stroke="#0277bd"/>
+  <text x="1070" y="255" text-anchor="middle" font-size="8">N2</text>
+
+  <circle cx="1120" cy="250" r="15" fill="lightblue" stroke="#0277bd"/>
+  <text x="1120" y="255" text-anchor="middle" font-size="8">N3</text>
+
+  <circle cx="1045" cy="300" r="15" fill="lightblue" stroke="#0277bd"/>
+  <text x="1045" y="305" text-anchor="middle" font-size="8">N4</text>
+
+  <circle cx="1095" cy="300" r="15" fill="lightblue" stroke="#0277bd"/>
+  <text x="1095" y="305" text-anchor="middle" font-size="8">N5</text>
+
+  <!-- Network connections -->
+  <line x1="1020" y1="250" x2="1070" y2="250" stroke="#0277bd" stroke-width="1"/>
+  <line x1="1070" y1="250" x2="1120" y2="250" stroke="#0277bd" stroke-width="1"/>
+  <line x1="1020" y1="250" x2="1045" y2="300" stroke="#0277bd" stroke-width="1"/>
+  <line x1="1070" y1="250" x2="1095" y2="300" stroke="#0277bd" stroke-width="1"/>
+  <line x1="1120" y1="250" x2="1095" y2="300" stroke="#0277bd" stroke-width="1"/>
+  <line x1="1045" y1="300" x2="1095" y2="300" stroke="#0277bd" stroke-width="1"/>
+
+  <text x="1070" y="330" text-anchor="middle" font-size="10">Consortium</text>
+  <text x="1070" y="345" text-anchor="middle" font-size="10">Byzantine Fault Tolerant</text>
+
+  <!-- Data flow annotations -->
+  <text x="1050" y="120" font-size="10" fill="#666" text-anchor="middle">Encrypted CDR + ZK Proofs</text>
+  <text x="1050" y="260" font-size="10" fill="#666" text-anchor="middle">REST API</text>
+  <text x="1050" y="380" font-size="10" fill="#666" text-anchor="middle">CDR Netting</text>
+  <text x="1050" y="500" font-size="10" fill="#666" text-anchor="middle">Privacy Contracts</text>
+  <text x="1050" y="630" font-size="10" fill="#666" text-anchor="middle">ZK + BLS Crypto</text>
+  <text x="1050" y="760" font-size="10" fill="#666" text-anchor="middle">Block Consensus</text>
+  <text x="1050" y="870" font-size="10" fill="#666" text-anchor="middle">Persistent Storage</text>
+
+  <!-- Arrow marker definition -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7"
+     refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2c3e50"/>
+    </marker>
+  </defs>
+</svg>

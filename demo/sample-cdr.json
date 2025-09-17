@@ -1,0 +1,26 @@
+{
+  "home_network": "T-Mobile-DE",
+  "visited_network": "Vodafone-UK",
+  "record_type": "VoiceCall",
+  "period": "2024-01",
+  "charges": {
+    "total_cents": 50000,
+    "currency": "EUR",
+    "exchange_rate": 100
+  },
+  "volume": {
+    "call_minutes": 25000,
+    "data_mb": 150000,
+    "sms_count": 5000
+  },
+  "privacy": {
+    "encrypted": true,
+    "zk_proof_available": true,
+    "proof_type": "groth16_bn254"
+  },
+  "batch_info": {
+    "batch_id": "demo-batch-001",
+    "record_count": 1250,
+    "submission_time": "2024-01-15T12:00:00Z"
+  }
+}
