@@ -19,9 +19,6 @@ path = "src/bin/trusted_setup_demo.rs"
 name = "cdr-pipeline-demo"
 path = "src/bin/cdr_pipeline_demo.rs"
 
-[[bin]]
-name = "basic-test"
-path = "src/bin/basic_test.rs"
 
 [[bin]]
 name = "test-real-crypto"
@@ -64,8 +61,7 @@ group = "0.13"
 pairing = "0.23"
 
 # Storage - Updated MDBX version
-libmdbx = "0.6"
-sled = "0.34"
+libmdbx = "0.6.1"
 
 # Networking
 libp2p = { version = "0.53", features = ["tcp", "tokio", "noise", "yamux", "gossipsub", "mdns", "identify", "macros"] }

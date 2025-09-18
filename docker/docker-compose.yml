@@ -1,0 +1,119 @@
+
+services:
+  validator-1:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: sp-validator-1
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    volumes:
+      - ./data/validator-1:/app/data
+    environment:
+      - VALIDATOR_ID=validator-1
+      - RUST_LOG=info
+      - NETWORK_ID=consortium
+    command: >
+      sh -c "
+      echo '🚀 Starting SP CDR Validator 1 (Bootstrap Node)' &&
+      ./target/release/sp-cdr-node start
+      --network consortium
+      --data-dir /app/data
+      --port 8080
+      --bootstrap
+      "
+    networks:
+      sp_blockchain_net:
+        ipv4_address: 172.30.0.10
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  validator-2:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: sp-validator-2
+    ports:
+      - "8090:8080"
+      - "8091:8081"
+    volumes:
+      - ./data/validator-2:/app/data
+    environment:
+      - VALIDATOR_ID=validator-2
+      - RUST_LOG=info
+      - NETWORK_ID=consortium
+    command: >
+      sh -c "
+      echo '⏳ Waiting for Bootstrap Node...' &&
+      sleep 15 &&
+      echo '🚀 Starting SP CDR Validator 2' &&
+      ./target/release/sp-cdr-node start
+      --network consortium
+      --data-dir /app/data
+      --port 8080
+      "
+    depends_on:
+      - validator-1
+    networks:
+      sp_blockchain_net:
+        ipv4_address: 172.30.0.11
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  validator-3:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: sp-validator-3
+    ports:
+      - "8100:8080"
+      - "8101:8081"
+    volumes:
+      - ./data/validator-3:/app/data
+    environment:
+      - VALIDATOR_ID=validator-3
+      - RUST_LOG=info
+      - NETWORK_ID=consortium
+    command: >
+      sh -c "
+      echo '⏳ Waiting for Network Formation...' &&
+      sleep 25 &&
+      echo '🚀 Starting SP CDR Validator 3' &&
+      ./target/release/sp-cdr-node start
+      --network consortium
+      --data-dir /app/data
+      --port 8080
+      "
+    depends_on:
+      - validator-1
+      - validator-2
+    networks:
+      sp_blockchain_net:
+        ipv4_address: 172.30.0.12
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  sp_blockchain_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
+
+volumes:
+  validator-1-data:
+  validator-2-data:
+  validator-3-data:

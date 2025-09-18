@@ -1,6 +1,6 @@
 // Complete CDR Pipeline Integration Demo
 // Shows end-to-end integration: CDR → ZK Proofs → Settlement → Blockchain
-use sp_cdr_reconciliation_bc::{cdr_pipeline::*, lib::NetworkId};
+use sp_cdr_reconciliation_bc::{cdr_pipeline::*, primitives::primitives::NetworkId};
 use std::path::PathBuf;
 
 #[tokio::main]
@@ -22,6 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         settlement_threshold_cents: 1000, // €10 minimum
         auto_accept_threshold_cents: 5000, // €50 auto-accept
         enable_triangular_netting: true,
+        is_bootstrap: true, // Demo runs as bootstrap node
     };
 
     // Simulate T-Mobile DE operator

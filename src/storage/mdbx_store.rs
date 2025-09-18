@@ -1,224 +1,258 @@
-// Real MDBX database wrapper for blockchain storage
-use crate::primitives::{Blake2bHash, Result, BlockchainError};
-use libmdbx::*;
-use std::path::Path;
-use std::sync::Arc;
+// Real MDBX storage implementation using Albatross patterns
+use std::{ops::Range, path::Path, sync::Arc};
+use libmdbx::{NoWriteMap, TableFlags, WriteFlags};
+use crate::primitives::{Result, BlockchainError, Blake2bHash};
+use crate::blockchain::Block;
+use super::ChainStore;
 
-/// Production MDBX storage with real persistence
-pub struct MdbxStore {
-    env: Arc<Environment<WriteMap>>,
-    blocks_db: Database<'static>,
-    metadata_db: Database<'static>,
-    transactions_db: Database<'static>,
+const GIGABYTE: usize = 1024 * 1024 * 1024;
+const TERABYTE: usize = GIGABYTE * 1024;
+
+/// Database config options (copied from Albatross)
+pub struct DatabaseConfig {
+    pub max_tables: Option<u64>,
+    pub max_readers: Option<u32>,
+    pub no_rdahead: bool,
+    pub size: Option<Range<isize>>,
+    pub growth_step: Option<isize>,
 }
 
-impl MdbxStore {
-    pub fn new(path: &str) -> Result<Self> {
-        // Create the database directory if it doesn't exist
-        std::fs::create_dir_all(path)
+impl Default for DatabaseConfig {
+    fn default() -> Self {
+        DatabaseConfig {
+            max_tables: Some(20),
+            max_readers: None,
+            no_rdahead: true,
+            // Default max database size: 2TB
+            size: Some(0..(2 * TERABYTE as isize)),
+            // Default growth step: 4GB
+            growth_step: Some(4 * GIGABYTE as isize),
+        }
+    }
+}
+
+impl From<DatabaseConfig> for libmdbx::DatabaseOptions {
+    fn from(value: DatabaseConfig) -> Self {
+        libmdbx::DatabaseOptions {
+            max_tables: value.max_tables,
+            max_readers: value.max_readers,
+            no_rdahead: value.no_rdahead,
+            mode: libmdbx::Mode::ReadWrite(libmdbx::ReadWriteOptions {
+                sync_mode: libmdbx::SyncMode::Durable,
+                min_size: value.size.as_ref().map(|r| r.start),
+                max_size: value.size.map(|r| r.end),
+                ..Default::default()
+            }),
+            liforeclaim: true,
+            ..Default::default()
+        }
+    }
+}
+
+/// Real MDBX Database following Albatross patterns exactly
+#[derive(Clone)]
+pub struct MdbxChainStore {
+    db: Arc<libmdbx::Database<NoWriteMap>>,
+}
+
+impl MdbxChainStore {
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
+        std::fs::create_dir_all(path.as_ref())
             .map_err(|e| BlockchainError::Storage(format!("Failed to create directory: {}", e)))?;
 
-        // Initialize MDBX environment
-        let env = Environment::new()
-            .set_max_dbs(10)           // Support multiple databases
-            .set_max_readers(126)      // Allow multiple concurrent readers
-            .set_geometry(-1, -1, 1024 * 1024 * 1024, -1, -1, -1) // 1GB max size
-            .open(Path::new(path))
-            .map_err(|e| BlockchainError::Storage(format!("Failed to open MDBX environment: {}", e)))?;
+        let config = DatabaseConfig::default();
+        let db = libmdbx::Database::open_with_options(path, libmdbx::DatabaseOptions::from(config))
+            .map_err(|e| BlockchainError::Storage(format!("MDBX open failed: {}", e)))?;
 
-        let env = Arc::new(env);
-
-        // Create databases for different data types
-        let blocks_db = {
-            let txn = env.begin_rw_txn()
-                .map_err(|e| BlockchainError::Storage(format!("Failed to begin transaction: {}", e)))?;
-            let db = txn.create_db(Some("blocks"), DatabaseFlags::empty())
-                .map_err(|e| BlockchainError::Storage(format!("Failed to create blocks database: {}", e)))?;
-            txn.commit()
-                .map_err(|e| BlockchainError::Storage(format!("Failed to commit transaction: {}", e)))?;
-            db
+        let store = Self {
+            db: Arc::new(db),
         };
 
-        let metadata_db = {
-            let txn = env.begin_rw_txn()
-                .map_err(|e| BlockchainError::Storage(format!("Failed to begin transaction: {}", e)))?;
-            let db = txn.create_db(Some("metadata"), DatabaseFlags::empty())
-                .map_err(|e| BlockchainError::Storage(format!("Failed to create metadata database: {}", e)))?;
-            txn.commit()
-                .map_err(|e| BlockchainError::Storage(format!("Failed to commit transaction: {}", e)))?;
-            db
-        };
+        // Create required tables
+        store.create_tables()?;
 
-        let transactions_db = {
-            let txn = env.begin_rw_txn()
-                .map_err(|e| BlockchainError::Storage(format!("Failed to begin transaction: {}", e)))?;
-            let db = txn.create_db(Some("transactions"), DatabaseFlags::empty())
-                .map_err(|e| BlockchainError::Storage(format!("Failed to create transactions database: {}", e)))?;
-            txn.commit()
-                .map_err(|e| BlockchainError::Storage(format!("Failed to commit transaction: {}", e)))?;
-            db
-        };
-
-        Ok(Self {
-            env,
-            blocks_db,
-            metadata_db,
-            transactions_db,
-        })
+        Ok(store)
     }
 
-    /// Get data by key from blocks database
-    pub async fn get(&self, key: &Blake2bHash) -> Result<Option<Vec<u8>>> {
-        let env = self.env.clone();
-        let db = self.blocks_db;
-        let key_bytes = key.as_bytes().to_vec();
+    fn create_tables(&self) -> Result<()> {
+        let txn = self.db.begin_rw_txn()
+            .map_err(|e| BlockchainError::Storage(format!("Transaction failed: {}", e)))?;
 
-        // Run database operation in blocking task to avoid blocking async runtime
-        tokio::task::spawn_blocking(move || {
-            let txn = env.begin_ro_txn()
-                .map_err(|e| BlockchainError::Storage(format!("Failed to begin read transaction: {}", e)))?;
-
-            match txn.get(&db, &key_bytes) {
-                Ok(data) => Ok(Some(data.to_vec())),
-                Err(MdbxError::NotFound) => Ok(None),
-                Err(e) => Err(BlockchainError::Storage(format!("Failed to get data: {}", e))),
+        // Create blocks table
+        if let Err(e) = txn.create_table(Some("blocks"), TableFlags::empty()) {
+            // Ignore error if table already exists
+            if !e.to_string().contains("already exists") {
+                return Err(BlockchainError::Storage(format!("Create blocks table failed: {}", e)));
             }
-        }).await
-        .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?
-    }
+        }
 
-    /// Put data by key into blocks database
-    pub async fn put(&self, key: &Blake2bHash, value: Vec<u8>) -> Result<()> {
-        let env = self.env.clone();
-        let db = self.blocks_db;
-        let key_bytes = key.as_bytes().to_vec();
-
-        tokio::task::spawn_blocking(move || {
-            let mut txn = env.begin_rw_txn()
-                .map_err(|e| BlockchainError::Storage(format!("Failed to begin write transaction: {}", e)))?;
-
-            txn.put(&db, &key_bytes, &value, WriteFlags::empty())
-                .map_err(|e| BlockchainError::Storage(format!("Failed to put data: {}", e)))?;
-
-            txn.commit()
-                .map_err(|e| BlockchainError::Storage(format!("Failed to commit transaction: {}", e)))?;
-
-            Ok(())
-        }).await
-        .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?
-    }
-
-    /// Get metadata by string key
-    pub async fn get_metadata(&self, key: &str) -> Result<Option<Vec<u8>>> {
-        let env = self.env.clone();
-        let db = self.metadata_db;
-        let key_bytes = key.as_bytes().to_vec();
-
-        tokio::task::spawn_blocking(move || {
-            let txn = env.begin_ro_txn()
-                .map_err(|e| BlockchainError::Storage(format!("Failed to begin read transaction: {}", e)))?;
-
-            match txn.get(&db, &key_bytes) {
-                Ok(data) => Ok(Some(data.to_vec())),
-                Err(MdbxError::NotFound) => Ok(None),
-                Err(e) => Err(BlockchainError::Storage(format!("Failed to get metadata: {}", e))),
+        // Create metadata table
+        if let Err(e) = txn.create_table(Some("metadata"), TableFlags::empty()) {
+            // Ignore error if table already exists
+            if !e.to_string().contains("already exists") {
+                return Err(BlockchainError::Storage(format!("Create metadata table failed: {}", e)));
             }
-        }).await
-        .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?
+        }
+
+        txn.commit()
+            .map_err(|e| BlockchainError::Storage(format!("Transaction commit failed: {}", e)))?;
+
+        Ok(())
     }
 
-    /// Put metadata by string key
-    pub async fn put_metadata(&self, key: &str, value: Vec<u8>) -> Result<()> {
-        let env = self.env.clone();
-        let db = self.metadata_db;
-        let key_bytes = key.as_bytes().to_vec();
+    // Direct MDBX put operation
+    fn mdbx_put(&self, table_name: &str, key: &[u8], value: &[u8]) -> Result<()> {
+        let txn = self.db.begin_rw_txn()
+            .map_err(|e| BlockchainError::Storage(format!("Write transaction failed: {}", e)))?;
 
-        tokio::task::spawn_blocking(move || {
-            let mut txn = env.begin_rw_txn()
-                .map_err(|e| BlockchainError::Storage(format!("Failed to begin write transaction: {}", e)))?;
+        let table = txn.open_table(Some(table_name))
+            .map_err(|e| BlockchainError::Storage(format!("Open table failed: {}", e)))?;
 
-            txn.put(&db, &key_bytes, &value, WriteFlags::empty())
-                .map_err(|e| BlockchainError::Storage(format!("Failed to put metadata: {}", e)))?;
+        txn.put(&table, key, value, WriteFlags::empty())
+            .map_err(|e| BlockchainError::Storage(format!("MDBX put failed: {}", e)))?;
 
-            txn.commit()
-                .map_err(|e| BlockchainError::Storage(format!("Failed to commit transaction: {}", e)))?;
+        txn.commit()
+            .map_err(|e| BlockchainError::Storage(format!("Transaction commit failed: {}", e)))?;
 
-            Ok(())
-        }).await
-        .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?
+        Ok(())
     }
 
-    /// Delete data by key
-    pub async fn delete(&self, key: &Blake2bHash) -> Result<bool> {
-        let env = self.env.clone();
-        let db = self.blocks_db;
-        let key_bytes = key.as_bytes().to_vec();
+    // Direct MDBX get operation
+    fn mdbx_get(&self, table_name: &str, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        let txn = self.db.begin_ro_txn()
+            .map_err(|e| BlockchainError::Storage(format!("Read transaction failed: {}", e)))?;
 
-        tokio::task::spawn_blocking(move || {
-            let mut txn = env.begin_rw_txn()
-                .map_err(|e| BlockchainError::Storage(format!("Failed to begin write transaction: {}", e)))?;
+        let table = txn.open_table(Some(table_name))
+            .map_err(|e| BlockchainError::Storage(format!("Open table failed: {}", e)))?;
 
-            match txn.del(&db, &key_bytes, None) {
-                Ok(()) => {
-                    txn.commit()
-                        .map_err(|e| BlockchainError::Storage(format!("Failed to commit transaction: {}", e)))?;
-                    Ok(true)
-                }
-                Err(MdbxError::NotFound) => Ok(false),
-                Err(e) => Err(BlockchainError::Storage(format!("Failed to delete data: {}", e))),
-            }
-        }).await
-        .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?
-    }
-
-    /// Get statistics about the database
-    pub async fn stats(&self) -> Result<DatabaseStats> {
-        let env = self.env.clone();
-        let blocks_db = self.blocks_db;
-        let metadata_db = self.metadata_db;
-        let transactions_db = self.transactions_db;
-
-        tokio::task::spawn_blocking(move || {
-            let txn = env.begin_ro_txn()
-                .map_err(|e| BlockchainError::Storage(format!("Failed to begin read transaction: {}", e)))?;
-
-            let blocks_stat = txn.db_stat(&blocks_db)
-                .map_err(|e| BlockchainError::Storage(format!("Failed to get blocks stats: {}", e)))?;
-
-            let metadata_stat = txn.db_stat(&metadata_db)
-                .map_err(|e| BlockchainError::Storage(format!("Failed to get metadata stats: {}", e)))?;
-
-            let transactions_stat = txn.db_stat(&transactions_db)
-                .map_err(|e| BlockchainError::Storage(format!("Failed to get transactions stats: {}", e)))?;
-
-            Ok(DatabaseStats {
-                blocks_entries: blocks_stat.entries(),
-                metadata_entries: metadata_stat.entries(),
-                transactions_entries: transactions_stat.entries(),
-                page_size: blocks_stat.page_size(),
-            })
-        }).await
-        .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?
-    }
-
-    /// Sync database to disk
-    pub async fn sync(&self) -> Result<()> {
-        let env = self.env.clone();
-
-        tokio::task::spawn_blocking(move || {
-            env.sync(true)
-                .map_err(|e| BlockchainError::Storage(format!("Failed to sync database: {}", e)))?;
-            Ok(())
-        }).await
-        .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?
+        // Use explicit type annotation to avoid inference issues
+        match txn.get::<Vec<u8>>(&table, key) {
+            Ok(Some(data)) => Ok(Some(data)),
+            Ok(None) => Ok(None),
+            Err(e) => Err(BlockchainError::Storage(format!("MDBX get failed: {}", e))),
+        }
     }
 }
 
-/// Database statistics
-#[derive(Debug, Clone)]
-pub struct DatabaseStats {
-    pub blocks_entries: usize,
-    pub metadata_entries: usize,
-    pub transactions_entries: usize,
-    pub page_size: u32,
+#[async_trait::async_trait]
+impl ChainStore for MdbxChainStore {
+    async fn get_block(&self, hash: &Blake2bHash) -> Result<Option<Block>> {
+        let store = self.clone();
+        let hash = *hash;
+
+        tokio::task::spawn_blocking(move || {
+            match store.mdbx_get("blocks", hash.as_bytes())? {
+                Some(data) => {
+                    let block: Block = bincode::deserialize(&data)
+                        .map_err(|e| BlockchainError::Storage(format!("Block deserialize failed: {}", e)))?;
+                    Ok(Some(block))
+                }
+                None => Ok(None),
+            }
+        })
+        .await
+        .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?
+    }
+
+    async fn get_block_at(&self, _block_number: u32) -> Result<Option<Block>> {
+        // Would need block number index - not implemented
+        Ok(None)
+    }
+
+    async fn put_block(&self, block: &Block) -> Result<()> {
+        let hash = block.hash();
+        let serialized = bincode::serialize(block)
+            .map_err(|e| BlockchainError::Storage(format!("Block serialize failed: {}", e)))?;
+
+        let store = self.clone();
+        tokio::task::spawn_blocking(move || {
+            store.mdbx_put("blocks", hash.as_bytes(), &serialized)
+        })
+        .await
+        .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?
+    }
+
+    async fn get_head_hash(&self) -> Result<Blake2bHash> {
+        let store = self.clone();
+        tokio::task::spawn_blocking(move || {
+            match store.mdbx_get("metadata", b"head")? {
+                Some(data) => {
+                    let hash: Blake2bHash = bincode::deserialize(&data)
+                        .map_err(|e| BlockchainError::Storage(format!("Head hash deserialize failed: {}", e)))?;
+                    Ok(hash)
+                }
+                None => Err(BlockchainError::Storage("No head hash found".to_string())),
+            }
+        })
+        .await
+        .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?
+    }
+
+    async fn set_head(&self, hash: &Blake2bHash) -> Result<()> {
+        let serialized = bincode::serialize(hash)
+            .map_err(|e| BlockchainError::Storage(format!("Head hash serialize failed: {}", e)))?;
+
+        let store = self.clone();
+        tokio::task::spawn_blocking(move || {
+            store.mdbx_put("metadata", b"head", &serialized)
+        })
+        .await
+        .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?
+    }
+
+    async fn get_macro_head_hash(&self) -> Result<Blake2bHash> {
+        let store = self.clone();
+        tokio::task::spawn_blocking(move || {
+            match store.mdbx_get("metadata", b"macro_head")? {
+                Some(data) => {
+                    let hash: Blake2bHash = bincode::deserialize(&data)
+                        .map_err(|e| BlockchainError::Storage(format!("Macro head deserialize failed: {}", e)))?;
+                    Ok(hash)
+                }
+                None => Err(BlockchainError::Storage("No macro head hash found".to_string())),
+            }
+        })
+        .await
+        .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?
+    }
+
+    async fn set_macro_head(&self, hash: &Blake2bHash) -> Result<()> {
+        let serialized = bincode::serialize(hash)
+            .map_err(|e| BlockchainError::Storage(format!("Macro head serialize failed: {}", e)))?;
+
+        let store = self.clone();
+        tokio::task::spawn_blocking(move || {
+            store.mdbx_put("metadata", b"macro_head", &serialized)
+        })
+        .await
+        .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?
+    }
+
+    async fn get_election_head_hash(&self) -> Result<Blake2bHash> {
+        let store = self.clone();
+        tokio::task::spawn_blocking(move || {
+            match store.mdbx_get("metadata", b"election_head")? {
+                Some(data) => {
+                    let hash: Blake2bHash = bincode::deserialize(&data)
+                        .map_err(|e| BlockchainError::Storage(format!("Election head deserialize failed: {}", e)))?;
+                    Ok(hash)
+                }
+                None => Err(BlockchainError::Storage("No election head hash found".to_string())),
+            }
+        })
+        .await
+        .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?
+    }
+
+    async fn set_election_head(&self, hash: &Blake2bHash) -> Result<()> {
+        let serialized = bincode::serialize(hash)
+            .map_err(|e| BlockchainError::Storage(format!("Election head serialize failed: {}", e)))?;
+
+        let store = self.clone();
+        tokio::task::spawn_blocking(move || {
+            store.mdbx_put("metadata", b"election_head", &serialized)
+        })
+        .await
+        .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?
+    }
 }

@@ -1,0 +1,324 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1800" height="1400" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="1800" height="1400" fill="#f8f9fa"/>
+
+  <!-- Title -->
+  <text x="900" y="40" text-anchor="middle" font-size="28" font-weight="bold" fill="#2c3e50">
+    SP CDR Reconciliation - Production Real-Time Architecture
+  </text>
+  <text x="900" y="65" text-anchor="middle" font-size="18" fill="#666">
+    Handling 10+ Billion CDRs/Day per Operator with Sub-Second Settlement
+  </text>
+
+  <!-- Layer 1: Telecom Infrastructure -->
+  <rect x="50" y="90" width="1700" height="160" rx="10" fill="#e8f5e8" stroke="#28a745" stroke-width="3"/>
+  <text x="80" y="120" font-size="20" font-weight="bold" fill="#28a745">🏢 TELECOM INFRASTRUCTURE - CDR SOURCES</text>
+
+  <!-- Cell Tower Networks -->
+  <rect x="100" y="140" width="240" height="90" rx="5" fill="#d4edda" stroke="#28a745"/>
+  <text x="220" y="165" text-anchor="middle" font-size="14" font-weight="bold">📡 Cell Tower Network</text>
+  <text x="220" y="185" text-anchor="middle" font-size="11">5G/4G Base Stations</text>
+  <text x="220" y="200" text-anchor="middle" font-size="11">📊 1M CDRs/hour</text>
+  <text x="220" y="215" text-anchor="middle" font-size="11">⚡ Real-time streaming</text>
+
+  <rect x="360" y="140" width="240" height="90" rx="5" fill="#d4edda" stroke="#28a745"/>
+  <text x="480" y="165" text-anchor="middle" font-size="14" font-weight="bold">🌐 Core Network</text>
+  <text x="480" y="185" text-anchor="middle" font-size="11">MSC/SGSN/P-GW</text>
+  <text x="480" y="200" text-anchor="middle" font-size="11">📊 5M CDRs/hour</text>
+  <text x="480" y="215" text-anchor="middle" font-size="11">⚡ Kafka streams</text>
+
+  <rect x="620" y="140" width="240" height="90" rx="5" fill="#d4edda" stroke="#28a745"/>
+  <text x="740" y="165" text-anchor="middle" font-size="14" font-weight="bold">🌍 Roaming Gateway</text>
+  <text x="740" y="185" text-anchor="middle" font-size="11">International CDRs</text>
+  <text x="740" y="200" text-anchor="middle" font-size="11">📊 500K CDRs/hour</text>
+  <text x="740" y="215" text-anchor="middle" font-size="11">🌍 Cross-border</text>
+
+  <rect x="880" y="140" width="240" height="90" rx="5" fill="#d4edda" stroke="#28a745"/>
+  <text x="1000" y="165" text-anchor="middle" font-size="14" font-weight="bold">📱 VAS/OTT Services</text>
+  <text x="1000" y="185" text-anchor="middle" font-size="11">Apps, IoT, M2M</text>
+  <text x="1000" y="200" text-anchor="middle" font-size="11">📊 2M CDRs/hour</text>
+  <text x="1000" y="215" text-anchor="middle" font-size="11">📱 Digital services</text>
+
+  <rect x="1140" y="140" width="240" height="90" rx="5" fill="#d4edda" stroke="#28a745"/>
+  <text x="1260" y="165" text-anchor="middle" font-size="14" font-weight="bold">🤝 Wholesale/MVNO</text>
+  <text x="1260" y="185" text-anchor="middle" font-size="11">Partner networks</text>
+  <text x="1260" y="200" text-anchor="middle" font-size="11">📊 800K CDRs/hour</text>
+  <text x="1260" y="215" text-anchor="middle" font-size="11">🤝 B2B traffic</text>
+
+  <!-- Total throughput box -->
+  <rect x="1400" y="150" width="280" height="70" rx="5" fill="#c3e6cb" stroke="#28a745" stroke-width="3"/>
+  <text x="1540" y="175" text-anchor="middle" font-size="16" font-weight="bold" fill="#155724">📊 TOTAL THROUGHPUT</text>
+  <text x="1540" y="195" text-anchor="middle" font-size="18" font-weight="bold" fill="#155724">10+ Billion CDRs/Day</text>
+  <text x="1540" y="210" text-anchor="middle" font-size="14" fill="#155724">⚡ 115K CDRs/second peak</text>
+
+  <!-- Data flow arrows -->
+  <line x1="220" y1="230" x2="220" y2="280" stroke="#28a745" stroke-width="4" marker-end="url(#arrowhead)"/>
+  <line x1="480" y1="230" x2="480" y2="280" stroke="#28a745" stroke-width="4" marker-end="url(#arrowhead)"/>
+  <line x1="740" y1="230" x2="740" y2="280" stroke="#28a745" stroke-width="4" marker-end="url(#arrowhead)"/>
+  <line x1="1000" y1="230" x2="1000" y2="280" stroke="#28a745" stroke-width="4" marker-end="url(#arrowhead)"/>
+  <line x1="1260" y1="230" x2="1260" y2="280" stroke="#28a745" stroke-width="4" marker-end="url(#arrowhead)"/>
+
+  <!-- Layer 2: Real-Time Ingestion -->
+  <rect x="50" y="280" width="1700" height="140" rx="10" fill="#fff3cd" stroke="#ffc107" stroke-width="3"/>
+  <text x="80" y="310" font-size="20" font-weight="bold" fill="#856404">🌊 REAL-TIME INGESTION &amp; STREAM PROCESSING</text>
+
+  <rect x="120" y="330" width="320" height="80" rx="5" fill="#fff3cd" stroke="#ffc107"/>
+  <text x="280" y="355" text-anchor="middle" font-size="14" font-weight="bold">Apache Kafka Cluster</text>
+  <text x="280" y="375" text-anchor="middle" font-size="11">📊 1000+ partitions</text>
+  <text x="280" y="390" text-anchor="middle" font-size="11">⚡ 10M messages/sec</text>
+  <text x="280" y="405" text-anchor="middle" font-size="11">🔄 Stream ingestion</text>
+
+  <rect x="460" y="330" width="320" height="80" rx="5" fill="#fff3cd" stroke="#ffc107"/>
+  <text x="620" y="355" text-anchor="middle" font-size="14" font-weight="bold">Apache Flink/Spark</text>
+  <text x="620" y="375" text-anchor="middle" font-size="11">🔄 Real-time aggregation</text>
+  <text x="620" y="390" text-anchor="middle" font-size="11">⚡ Sub-second processing</text>
+  <text x="620" y="405" text-anchor="middle" font-size="11">📊 Event processing</text>
+
+  <rect x="800" y="330" width="320" height="80" rx="5" fill="#fff3cd" stroke="#ffc107"/>
+  <text x="960" y="355" text-anchor="middle" font-size="14" font-weight="bold">Redis Cache Layer</text>
+  <text x="960" y="375" text-anchor="middle" font-size="11">🚀 In-memory aggregation</text>
+  <text x="960" y="390" text-anchor="middle" font-size="11">⚡ Microsecond lookup</text>
+  <text x="960" y="405" text-anchor="middle" font-size="11">💾 Hot data cache</text>
+
+  <rect x="1140" y="330" width="320" height="80" rx="5" fill="#fff3cd" stroke="#ffc107"/>
+  <text x="1300" y="355" text-anchor="middle" font-size="14" font-weight="bold">Data Lake Storage</text>
+  <text x="1300" y="375" text-anchor="middle" font-size="11">📁 HDFS/S3 raw CDRs</text>
+  <text x="1300" y="390" text-anchor="middle" font-size="11">💾 Petabyte scale</text>
+  <text x="1300" y="405" text-anchor="middle" font-size="11">🗃️ Long-term archive</text>
+
+  <!-- Arrow to next layer -->
+  <line x1="900" y1="420" x2="900" y2="470" stroke="#ffc107" stroke-width="4" marker-end="url(#arrowhead)"/>
+
+  <!-- Layer 3: CDR Aggregation &amp; Batching -->
+  <rect x="50" y="470" width="1700" height="140" rx="10" fill="#d1ecf1" stroke="#17a2b8" stroke-width="3"/>
+  <text x="80" y="500" font-size="20" font-weight="bold" fill="#0c5460">📊 CDR AGGREGATION &amp; BATCHING ENGINE</text>
+
+  <rect x="100" y="520" width="240" height="80" rx="5" fill="#bee5eb" stroke="#17a2b8"/>
+  <text x="220" y="545" text-anchor="middle" font-size="12" font-weight="bold">⏰ Temporal Aggregation</text>
+  <text x="220" y="565" text-anchor="middle" font-size="10">⏰ Hourly batches</text>
+  <text x="220" y="580" text-anchor="middle" font-size="10">📊 100M → 1K records</text>
+  <text x="220" y="595" text-anchor="middle" font-size="10">🔄 Time windows</text>
+
+  <rect x="360" y="520" width="240" height="80" rx="5" fill="#bee5eb" stroke="#17a2b8"/>
+  <text x="480" y="545" text-anchor="middle" font-size="12" font-weight="bold">🌐 Network Pair Grouping</text>
+  <text x="480" y="565" text-anchor="middle" font-size="10">🌐 Home ↔ Visited</text>
+  <text x="480" y="580" text-anchor="middle" font-size="10">🔗 Bilateral netting</text>
+  <text x="480" y="595" text-anchor="middle" font-size="10">⚖️ Balance calculation</text>
+
+  <rect x="620" y="520" width="240" height="80" rx="5" fill="#bee5eb" stroke="#17a2b8"/>
+  <text x="740" y="545" text-anchor="middle" font-size="12" font-weight="bold">🔺 Triangular Detection</text>
+  <text x="740" y="565" text-anchor="middle" font-size="10">🔺 A→B→C→A cycles</text>
+  <text x="740" y="580" text-anchor="middle" font-size="10">💰 Netting opportunities</text>
+  <text x="740" y="595" text-anchor="middle" font-size="10">📉 Cost optimization</text>
+
+  <rect x="880" y="520" width="240" height="80" rx="5" fill="#bee5eb" stroke="#17a2b8"/>
+  <text x="1000" y="545" text-anchor="middle" font-size="12" font-weight="bold">🚨 Fraud Detection</text>
+  <text x="1000" y="565" text-anchor="middle" font-size="10">🚨 Anomaly detection</text>
+  <text x="1000" y="580" text-anchor="middle" font-size="10">⚡ Real-time alerts</text>
+  <text x="1000" y="595" text-anchor="middle" font-size="10">🤖 ML algorithms</text>
+
+  <rect x="1140" y="520" width="240" height="80" rx="5" fill="#bee5eb" stroke="#17a2b8"/>
+  <text x="1260" y="545" text-anchor="middle" font-size="12" font-weight="bold">⚖️ Dispute Management</text>
+  <text x="1260" y="565" text-anchor="middle" font-size="10">⚖️ CDR reconciliation</text>
+  <text x="1260" y="580" text-anchor="middle" font-size="10">📝 Audit trails</text>
+  <text x="1260" y="595" text-anchor="middle" font-size="10">🔍 Evidence collection</text>
+
+  <rect x="1400" y="520" width="240" height="80" rx="5" fill="#bee5eb" stroke="#17a2b8"/>
+  <text x="1520" y="545" text-anchor="middle" font-size="12" font-weight="bold">💶 Rate Engine</text>
+  <text x="1520" y="565" text-anchor="middle" font-size="10">💶 Dynamic pricing</text>
+  <text x="1520" y="580" text-anchor="middle" font-size="10">📈 Real-time rates</text>
+  <text x="1520" y="595" text-anchor="middle" font-size="10">🌍 Multi-currency</text>
+
+  <!-- Arrow to ZK layer -->
+  <line x1="900" y1="610" x2="900" y2="660" stroke="#17a2b8" stroke-width="4" marker-end="url(#arrowhead)"/>
+
+  <!-- Layer 4: Distributed ZK Proof Generation -->
+  <rect x="50" y="660" width="1700" height="140" rx="10" fill="#f8d7da" stroke="#dc3545" stroke-width="3"/>
+  <text x="80" y="690" font-size="20" font-weight="bold" fill="#721c24">🔐 DISTRIBUTED ZK PROOF GENERATION LAYER</text>
+
+  <rect x="100" y="710" width="200" height="80" rx="5" fill="#f5c6cb" stroke="#dc3545"/>
+  <text x="200" y="730" text-anchor="middle" font-size="11" font-weight="bold">🖥️ GPU Cluster</text>
+  <text x="200" y="750" text-anchor="middle" font-size="9">🖥️ NVIDIA A100</text>
+  <text x="200" y="765" text-anchor="middle" font-size="9">⚡ 1000+ proofs/sec</text>
+  <text x="200" y="780" text-anchor="middle" font-size="9">🔥 Parallel processing</text>
+
+  <rect x="320" y="710" width="200" height="80" rx="5" fill="#f5c6cb" stroke="#dc3545"/>
+  <text x="420" y="730" text-anchor="middle" font-size="11" font-weight="bold">🔗 Proof Coordinator</text>
+  <text x="420" y="750" text-anchor="middle" font-size="9">🔗 Batch coordination</text>
+  <text x="420" y="765" text-anchor="middle" font-size="9">⚖️ Load balancing</text>
+  <text x="420" y="780" text-anchor="middle" font-size="9">📊 Queue management</text>
+
+  <rect x="540" y="710" width="200" height="80" rx="5" fill="#f5c6cb" stroke="#dc3545"/>
+  <text x="640" y="730" text-anchor="middle" font-size="11" font-weight="bold">🌳 Merkle Tree Builder</text>
+  <text x="640" y="750" text-anchor="middle" font-size="9">🌳 CDR commitments</text>
+  <text x="640" y="765" text-anchor="middle" font-size="9">🔐 Privacy preservation</text>
+  <text x="640" y="780" text-anchor="middle" font-size="9">📊 Batch proofs</text>
+
+  <rect x="760" y="710" width="200" height="80" rx="5" fill="#f5c6cb" stroke="#dc3545"/>
+  <text x="860" y="730" text-anchor="middle" font-size="11" font-weight="bold">⚙️ Circuit Compiler</text>
+  <text x="860" y="750" text-anchor="middle" font-size="9">⚙️ Dynamic circuits</text>
+  <text x="860" y="765" text-anchor="middle" font-size="9">🔄 Optimization</text>
+  <text x="860" y="780" text-anchor="middle" font-size="9">📐 R1CS generation</text>
+
+  <rect x="980" y="710" width="200" height="80" rx="5" fill="#f5c6cb" stroke="#dc3545"/>
+  <text x="1080" y="730" text-anchor="middle" font-size="11" font-weight="bold">✅ Proof Verification</text>
+  <text x="1080" y="750" text-anchor="middle" font-size="9">✅ Batch validation</text>
+  <text x="1080" y="765" text-anchor="middle" font-size="9">⚡ Parallel verify</text>
+  <text x="1080" y="780" text-anchor="middle" font-size="9">🔍 Soundness check</text>
+
+  <rect x="1200" y="710" width="200" height="80" rx="5" fill="#f5c6cb" stroke="#dc3545"/>
+  <text x="1300" y="730" text-anchor="middle" font-size="11" font-weight="bold">🗝️ Key Management</text>
+  <text x="1300" y="750" text-anchor="middle" font-size="9">🗝️ HSM integration</text>
+  <text x="1300" y="765" text-anchor="middle" font-size="9">🔒 Secure storage</text>
+  <text x="1300" y="780" text-anchor="middle" font-size="9">🔄 Key rotation</text>
+
+  <rect x="1420" y="710" width="200" height="80" rx="5" fill="#f5c6cb" stroke="#dc3545"/>
+  <text x="1520" y="730" text-anchor="middle" font-size="11" font-weight="bold">🤝 Trusted Setup</text>
+  <text x="1520" y="750" text-anchor="middle" font-size="9">🤝 Multi-party MPC</text>
+  <text x="1520" y="765" text-anchor="middle" font-size="9">🔐 Ceremony</text>
+  <text x="1520" y="780" text-anchor="middle" font-size="9">🛡️ Powers of Tau</text>
+
+  <!-- Arrow to P2P layer -->
+  <line x1="900" y1="800" x2="900" y2="850" stroke="#dc3545" stroke-width="4" marker-end="url(#arrowhead)"/>
+
+  <!-- Layer 5: Inter-Operator P2P Settlement Network -->
+  <rect x="50" y="850" width="1700" height="140" rx="10" fill="#e2e3ff" stroke="#6610f2" stroke-width="3"/>
+  <text x="80" y="880" font-size="20" font-weight="bold" fill="#3d0b80">🌐 INTER-OPERATOR P2P SETTLEMENT NETWORK</text>
+
+  <rect x="120" y="900" width="250" height="80" rx="5" fill="#c8cbff" stroke="#6610f2"/>
+  <text x="245" y="925" text-anchor="middle" font-size="12" font-weight="bold">🌉 Settlement Gateway</text>
+  <text x="245" y="945" text-anchor="middle" font-size="10">🌉 Cross-operator bridge</text>
+  <text x="245" y="960" text-anchor="middle" font-size="10">🔗 Protocol translation</text>
+  <text x="245" y="975" text-anchor="middle" font-size="10">🌍 Multi-region sync</text>
+
+  <rect x="390" y="900" width="250" height="80" rx="5" fill="#c8cbff" stroke="#6610f2"/>
+  <text x="515" y="925" text-anchor="middle" font-size="12" font-weight="bold">⚖️ Consensus Engine</text>
+  <text x="515" y="945" text-anchor="middle" font-size="10">⚖️ Byzantine fault tolerance</text>
+  <text x="515" y="960" text-anchor="middle" font-size="10">🔗 3-party consensus</text>
+  <text x="515" y="975" text-anchor="middle" font-size="10">🎯 Finality guarantees</text>
+
+  <rect x="660" y="900" width="250" height="80" rx="5" fill="#c8cbff" stroke="#6610f2"/>
+  <text x="785" y="925" text-anchor="middle" font-size="12" font-weight="bold">📜 Smart Contract VM</text>
+  <text x="785" y="945" text-anchor="middle" font-size="10">📜 Settlement contracts</text>
+  <text x="785" y="960" text-anchor="middle" font-size="10">⚡ Gas metering</text>
+  <text x="785" y="975" text-anchor="middle" font-size="10">🔧 Stack machine</text>
+
+  <rect x="930" y="900" width="250" height="80" rx="5" fill="#c8cbff" stroke="#6610f2"/>
+  <text x="1055" y="925" text-anchor="middle" font-size="12" font-weight="bold">🔺 Triangular Netting</text>
+  <text x="1055" y="945" text-anchor="middle" font-size="10">🔺 Multi-party optimization</text>
+  <text x="1055" y="960" text-anchor="middle" font-size="10">💰 80%+ cost reduction</text>
+  <text x="1055" y="975" text-anchor="middle" font-size="10">🎯 Cycle detection</text>
+
+  <rect x="1200" y="900" width="250" height="80" rx="5" fill="#c8cbff" stroke="#6610f2"/>
+  <text x="1325" y="925" text-anchor="middle" font-size="12" font-weight="bold">⚖️ Dispute Resolution</text>
+  <text x="1325" y="945" text-anchor="middle" font-size="10">⚖️ Automated arbitration</text>
+  <text x="1325" y="960" text-anchor="middle" font-size="10">📊 Evidence validation</text>
+  <text x="1325" y="975" text-anchor="middle" font-size="10">🏛️ Governance rules</text>
+
+  <rect x="1470" y="900" width="250" height="80" rx="5" fill="#c8cbff" stroke="#6610f2"/>
+  <text x="1595" y="925" text-anchor="middle" font-size="12" font-weight="bold">📋 Regulatory Compliance</text>
+  <text x="1595" y="945" text-anchor="middle" font-size="10">📋 GDPR/AML compliance</text>
+  <text x="1595" y="960" text-anchor="middle" font-size="10">📝 Audit reports</text>
+  <text x="1595" y="975" text-anchor="middle" font-size="10">🛡️ Privacy controls</text>
+
+  <!-- Arrow to blockchain -->
+  <line x1="900" y1="990" x2="900" y2="1040" stroke="#6610f2" stroke-width="4" marker-end="url(#arrowhead)"/>
+
+  <!-- Layer 6: High-Performance Blockchain Consensus -->
+  <rect x="50" y="1040" width="1700" height="140" rx="10" fill="#d4edda" stroke="#28a745" stroke-width="3"/>
+  <text x="80" y="1070" font-size="20" font-weight="bold" fill="#155724">⚡ HIGH-PERFORMANCE BLOCKCHAIN CONSENSUS</text>
+
+  <rect x="120" y="1090" width="240" height="80" rx="5" fill="#c3e6cb" stroke="#28a745"/>
+  <text x="240" y="1115" text-anchor="middle" font-size="12" font-weight="bold">⚡ Albatross Consensus</text>
+  <text x="240" y="1135" text-anchor="middle" font-size="10">⚡ 1000+ TPS</text>
+  <text x="240" y="1150" text-anchor="middle" font-size="10">🔗 Instant finality</text>
+  <text x="240" y="1165" text-anchor="middle" font-size="10">📦 Micro/macro blocks</text>
+
+  <rect x="380" y="1090" width="240" height="80" rx="5" fill="#c3e6cb" stroke="#28a745"/>
+  <text x="500" y="1115" text-anchor="middle" font-size="12" font-weight="bold">🏢 Validator Network</text>
+  <text x="500" y="1135" text-anchor="middle" font-size="10">🏢 SP consortium</text>
+  <text x="500" y="1150" text-anchor="middle" font-size="10">🌍 Global distribution</text>
+  <text x="500" y="1165" text-anchor="middle" font-size="10">⚖️ Stake-based</text>
+
+  <rect x="640" y="1090" width="240" height="80" rx="5" fill="#c3e6cb" stroke="#28a745"/>
+  <text x="760" y="1115" text-anchor="middle" font-size="12" font-weight="bold">📦 Block Production</text>
+  <text x="760" y="1135" text-anchor="middle" font-size="10">📦 Micro/macro blocks</text>
+  <text x="760" y="1150" text-anchor="middle" font-size="10">⏱️ 1-second blocks</text>
+  <text x="760" y="1165" text-anchor="middle" font-size="10">🔄 Round-robin</text>
+
+  <rect x="900" y="1090" width="240" height="80" rx="5" fill="#c3e6cb" stroke="#28a745"/>
+  <text x="1020" y="1115" text-anchor="middle" font-size="12" font-weight="bold">💾 State Management</text>
+  <text x="1020" y="1135" text-anchor="middle" font-size="10">💾 Incremental sync</text>
+  <text x="1020" y="1150" text-anchor="middle" font-size="10">🗃️ Efficient storage</text>
+  <text x="1020" y="1165" text-anchor="middle" font-size="10">📊 State pruning</text>
+
+  <rect x="1160" y="1090" width="240" height="80" rx="5" fill="#c3e6cb" stroke="#28a745"/>
+  <text x="1280" y="1115" text-anchor="middle" font-size="12" font-weight="bold">🌉 Cross-Chain Bridge</text>
+  <text x="1280" y="1135" text-anchor="middle" font-size="10">🌉 External networks</text>
+  <text x="1280" y="1150" text-anchor="middle" font-size="10">🔗 Interoperability</text>
+  <text x="1280" y="1165" text-anchor="middle" font-size="10">🔄 Asset transfers</text>
+
+  <rect x="1420" y="1090" width="240" height="80" rx="5" fill="#c3e6cb" stroke="#28a745"/>
+  <text x="1540" y="1115" text-anchor="middle" font-size="12" font-weight="bold">✅ Finality Engine</text>
+  <text x="1540" y="1135" text-anchor="middle" font-size="10">✅ Probabilistic → Absolute</text>
+  <text x="1540" y="1150" text-anchor="middle" font-size="10">⏱️ 3-second finality</text>
+  <text x="1540" y="1165" text-anchor="middle" font-size="10">🛡️ Economic security</text>
+
+  <!-- Arrow to storage -->
+  <line x1="900" y1="1180" x2="900" y2="1230" stroke="#28a745" stroke-width="4" marker-end="url(#arrowhead)"/>
+
+  <!-- Layer 7: Distributed Storage -->
+  <rect x="50" y="1230" width="1700" height="140" rx="10" fill="#fff3cd" stroke="#ffc107" stroke-width="3"/>
+  <text x="80" y="1260" font-size="20" font-weight="bold" fill="#856404">💾 DISTRIBUTED STORAGE &amp; DATA MANAGEMENT</text>
+
+  <rect x="100" y="1280" width="200" height="80" rx="5" fill="#fff3cd" stroke="#ffc107"/>
+  <text x="200" y="1305" text-anchor="middle" font-size="11" font-weight="bold">🗂️ MDBX Sharding</text>
+  <text x="200" y="1325" text-anchor="middle" font-size="9">🗂️ Horizontal scaling</text>
+  <text x="200" y="1340" text-anchor="middle" font-size="9">💾 100TB+ per shard</text>
+  <text x="200" y="1355" text-anchor="middle" font-size="9">⚡ Memory-mapped</text>
+
+  <rect x="320" y="1280" width="200" height="80" rx="5" fill="#fff3cd" stroke="#ffc107"/>
+  <text x="420" y="1305" text-anchor="middle" font-size="11" font-weight="bold">🌡️ Hot/Warm/Cold</text>
+  <text x="420" y="1325" text-anchor="middle" font-size="9">🌡️ Tiered storage</text>
+  <text x="420" y="1340" text-anchor="middle" font-size="9">💰 Cost optimization</text>
+  <text x="420" y="1355" text-anchor="middle" font-size="9">📊 Lifecycle management</text>
+
+  <rect x="540" y="1280" width="200" height="80" rx="5" fill="#fff3cd" stroke="#ffc107"/>
+  <text x="640" y="1305" text-anchor="middle" font-size="11" font-weight="bold">🔄 Backup &amp; DR</text>
+  <text x="640" y="1325" text-anchor="middle" font-size="9">🔄 Real-time replication</text>
+  <text x="640" y="1340" text-anchor="middle" font-size="9">🌍 Multi-region</text>
+  <text x="640" y="1355" text-anchor="middle" font-size="9">⏱️ RTO &lt; 5min</text>
+
+  <rect x="760" y="1280" width="200" height="80" rx="5" fill="#fff3cd" stroke="#ffc107"/>
+  <text x="860" y="1305" text-anchor="middle" font-size="11" font-weight="bold">📦 Archive Engine</text>
+  <text x="860" y="1325" text-anchor="middle" font-size="9">📦 Data compression</text>
+  <text x="860" y="1340" text-anchor="middle" font-size="9">⚖️ Legal retention</text>
+  <text x="860" y="1355" text-anchor="middle" font-size="9">🗃️ Immutable storage</text>
+
+  <rect x="980" y="1280" width="200" height="80" rx="5" fill="#fff3cd" stroke="#ffc107"/>
+  <text x="1080" y="1305" text-anchor="middle" font-size="11" font-weight="bold">🔍 Query Engine</text>
+  <text x="1080" y="1325" text-anchor="middle" font-size="9">🔍 Real-time analytics</text>
+  <text x="1080" y="1340" text-anchor="middle" font-size="9">📊 Business intelligence</text>
+  <text x="1080" y="1355" text-anchor="middle" font-size="9">⚡ Sub-second queries</text>
+
+  <rect x="1200" y="1280" width="200" height="80" rx="5" fill="#fff3cd" stroke="#ffc107"/>
+  <text x="1300" y="1305" text-anchor="middle" font-size="11" font-weight="bold">🛡️ Data Governance</text>
+  <text x="1300" y="1325" text-anchor="middle" font-size="9">🛡️ Privacy controls</text>
+  <text x="1300" y="1340" text-anchor="middle" font-size="9">📋 Compliance</text>
+  <text x="1300" y="1355" text-anchor="middle" font-size="9">🔍 Audit logging</text>
+
+  <rect x="1420" y="1280" width="200" height="80" rx="5" fill="#fff3cd" stroke="#ffc107"/>
+  <text x="1520" y="1305" text-anchor="middle" font-size="11" font-weight="bold">📈 Monitoring</text>
+  <text x="1520" y="1325" text-anchor="middle" font-size="9">📈 Performance metrics</text>
+  <text x="1520" y="1340" text-anchor="middle" font-size="9">🚨 Alerting</text>
+  <text x="1520" y="1355" text-anchor="middle" font-size="9">📊 Observability</text>
+
+  <!-- Arrow marker definition -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7"
+     refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2c3e50"/>
+    </marker>
+  </defs>
+</svg>

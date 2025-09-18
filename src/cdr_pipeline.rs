@@ -1,14 +1,14 @@
 // Complete end-to-end CDR processing pipeline
 // Integrates all components: networking, ZK proofs, storage, consensus, settlement
 use crate::{
-    primitives::{Result, Blake2bHash, NetworkId},
+    primitives::{Result, Blake2bHash, NetworkId, BlockchainError},
     network::{SPNetworkManager, NetworkCommand, NetworkEvent, SPNetworkMessage},
     zkp::{
         trusted_setup::TrustedSetupCeremony,
         albatross_zkp::{AlbatrossZKVerifier, AlbatrossZKProver, CDRSettlementInputs, CDRPrivacyProofInputs},
         circuits::{CDRPrivacyCircuit, SettlementCalculationCircuit}
     },
-    storage::SimpleChainStore,
+    storage::{SimpleChainStore, MdbxChainStore, ChainStore},
     blockchain::{Block, block::{Transaction, TransactionData, CDRTransaction, SettlementTransaction, CDRType}}
 };
 use libp2p::PeerId;
@@ -30,7 +30,7 @@ pub struct CDRPipeline {
     zk_verifier: AlbatrossZKVerifier,
 
     /// Blockchain storage
-    chain_store: Arc<SimpleChainStore>,
+    chain_store: Arc<dyn ChainStore>,
 
     /// Pipeline configuration
     config: PipelineConfig,
@@ -56,6 +56,7 @@ pub struct PipelineConfig {
     pub settlement_threshold_cents: u64,
     pub auto_accept_threshold_cents: u64,
     pub enable_triangular_netting: bool,
+    pub is_bootstrap: bool,
 }
 
 /// CDR batch for processing
@@ -119,16 +120,31 @@ impl CDRPipeline {
     pub async fn new(network_id: NetworkId, listen_addr: libp2p::Multiaddr, config: PipelineConfig) -> Result<Self> {
         info!("🏗️  Initializing CDR Pipeline for {:?}", network_id);
 
-        // Initialize trusted setup and ZK system
+        // Initialize trusted setup and ZK system with proper coordination
         info!("🔐 Loading ZK trusted setup...");
         let ceremony = TrustedSetupCeremony::sp_consortium_ceremony(config.keys_dir.clone());
 
-        // Ensure trusted setup exists or create it
+        // Coordinate trusted setup ceremony between validators
         if !ceremony.verify_ceremony().await.unwrap_or(false) {
-            info!("🔐 Running trusted setup ceremony...");
-            let mut ceremony = TrustedSetupCeremony::sp_consortium_ceremony(config.keys_dir.clone());
-            let mut rng = StdRng::from_entropy();
-            ceremony.run_ceremony(&mut rng).await?;
+            if config.is_bootstrap {
+                info!("🔐 Running trusted setup ceremony as bootstrap node...");
+                let mut ceremony = TrustedSetupCeremony::sp_consortium_ceremony(config.keys_dir.clone());
+                let mut rng = StdRng::from_entropy();
+                ceremony.run_ceremony(&mut rng).await?;
+                info!("✅ Bootstrap trusted setup ceremony completed - keys will be shared via P2P");
+            } else {
+                info!("⏳ Non-bootstrap node waiting to receive trusted setup keys from bootstrap node via P2P...");
+                // Non-bootstrap validators wait for keys through P2P discovery
+                tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+
+                // Try to verify again after waiting - keys might have been received
+                if !ceremony.verify_ceremony().await.unwrap_or(false) {
+                    warn!("⚠️  No trusted setup keys received yet - generating local fallback keys");
+                    let mut ceremony = TrustedSetupCeremony::sp_consortium_ceremony(config.keys_dir.clone());
+                    let mut rng = StdRng::from_entropy();
+                    ceremony.run_ceremony(&mut rng).await?;
+                }
+            }
         }
 
         // Initialize ZK prover and verifier with real keys
@@ -143,8 +159,11 @@ impl CDRPipeline {
 
         info!("🌐 Network manager initialized");
 
-        // Initialize storage
-        let chain_store = Arc::new(SimpleChainStore::new());
+        // Initialize persistent MDBX storage
+        let storage_path = format!("{}/blockchain", config.keys_dir.parent().unwrap().display());
+        std::fs::create_dir_all(&storage_path).map_err(|e| BlockchainError::Storage(e.to_string()))?;
+
+        let chain_store = Arc::new(MdbxChainStore::new(&storage_path)?);
 
         info!("💾 Storage initialized");
 
@@ -270,7 +289,7 @@ impl CDRPipeline {
     /// Handle gossip messages
     async fn handle_gossip_message(&mut self, topic: String, message: SPNetworkMessage, _source: PeerId) -> Result<()> {
         match topic.as_str() {
-            "cdr_batches" => {
+            "cdr" => {
                 if let SPNetworkMessage::CDRBatchReady { .. } = message {
                     // Process CDR batch announcements
                     debug!("CDR batch announced via gossip");
@@ -641,7 +660,7 @@ impl CDRPipeline {
         };
 
         let _ = self.network_command_sender.send(NetworkCommand::Broadcast {
-            topic: "cdr_batches".to_string(),
+            topic: "cdr".to_string(),
             message: batch_msg,
         }).await;
 

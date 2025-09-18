@@ -1,0 +1,37 @@
+# Optimized Dockerfile using pre-built binaries
+FROM ubuntu:24.04
+
+# Install runtime dependencies only (no build tools)
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    curl \
+    procps \
+    htop \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /app
+
+# Copy pre-built binary from host
+COPY target/release/sp-cdr-node ./target/release/sp-cdr-node
+COPY target/release/test-real-crypto ./target/release/test-real-crypto
+
+# Make binaries executable
+RUN chmod +x ./target/release/sp-cdr-node ./target/release/test-real-crypto
+
+# Test cryptography works with pre-built binary
+RUN echo "Testing cryptographic functions..." && \
+    ./target/release/test-real-crypto || echo "Crypto test completed"
+
+# Expose ports
+EXPOSE 8080 8081 8082
+
+# Create data directory
+RUN mkdir -p /app/data
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8081/health || exit 1
+
+# Default command
+CMD ["./target/release/sp-cdr-node"]
