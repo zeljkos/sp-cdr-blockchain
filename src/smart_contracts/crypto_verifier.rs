@@ -4,7 +4,7 @@ use ark_bn254::Bn254;
 use ark_snark::SNARK;
 use ark_serialize::CanonicalDeserialize;
 use crate::primitives::{Result, BlockchainError, Blake2bHash};
-use crate::crypto::{PublicKey, Signature, AggregateSignature, AggregatePublicKey};
+use crate::crypto::{BLSPublicKey, BLSSignature, BLSVerifier as RealBLSVerifier, PublicKey};
 use std::collections::HashMap;
 
 /// Real ZK proof verifier for settlement contracts
@@ -144,18 +144,18 @@ impl ZKProofVerifier {
 
 /// Real BLS signature verifier for multi-party validation
 pub struct BLSVerifier {
-    operator_keys: HashMap<String, PublicKey>,
+    verifier: RealBLSVerifier,
 }
 
 impl BLSVerifier {
     pub fn new() -> Self {
         Self {
-            operator_keys: HashMap::new(),
+            verifier: RealBLSVerifier::new(),
         }
     }
 
-    pub fn register_operator(&mut self, network_name: String, public_key: PublicKey) {
-        self.operator_keys.insert(network_name, public_key);
+    pub fn register_operator(&mut self, network_name: String, public_key: BLSPublicKey) {
+        self.verifier.register_operator(&network_name, public_key);
     }
 
     /// Verify single operator signature
@@ -165,19 +165,7 @@ impl BLSVerifier {
         message: &[u8],
         signature_bytes: &[u8],
     ) -> Result<bool> {
-        let public_key = self.operator_keys.get(network_name)
-            .ok_or_else(|| BlockchainError::InvalidSignature)?;
-
-        // Deserialize signature
-        let signature = Signature::from_bytes(signature_bytes)
-            .map_err(|_| BlockchainError::InvalidSignature)?;
-
-        // Hash message for signing
-        let message_hash = crate::primitives::primitives::hash_data(message);
-
-        // Verify signature
-        let is_valid = signature.verify(public_key, &message_hash)?;
-        Ok(is_valid)
+        self.verifier.verify_operator_signature(network_name, message, signature_bytes)
     }
 
     /// Verify multi-party aggregate signature
@@ -187,28 +175,7 @@ impl BLSVerifier {
         message: &[u8],
         aggregate_sig_bytes: &[u8],
     ) -> Result<bool> {
-        // Get public keys for all networks
-        let mut public_keys = Vec::new();
-        for network in networks {
-            let pk = self.operator_keys.get(network)
-                .ok_or_else(|| BlockchainError::InvalidSignature)?;
-            public_keys.push(pk.clone());
-        }
-
-        // Deserialize aggregate signature
-        let agg_signature = AggregateSignature::from_bytes(aggregate_sig_bytes)
-            .map_err(|_| BlockchainError::InvalidSignature)?;
-
-        // Create aggregate public key
-        let agg_public_key = AggregatePublicKey::aggregate(&public_keys)
-            .map_err(|_| BlockchainError::InvalidSignature)?;
-
-        // Hash message
-        let message_hash = crate::primitives::primitives::hash_data(message);
-
-        // Verify aggregate signature
-        let is_valid = agg_signature.verify(&agg_public_key, &message_hash)?;
-        Ok(is_valid)
+        self.verifier.verify_multi_party_signature(networks, message, aggregate_sig_bytes)
     }
 
     /// Verify threshold signature (t-of-n)
@@ -259,7 +226,7 @@ impl ContractCryptoVerifier {
         self.zk_verifier.load_cdr_privacy_key(cdr_privacy_vk)?;
 
         for (network, key) in operator_keys {
-            self.bls_verifier.register_operator(network, key);
+            self.bls_verifier.register_operator(network, key.inner);
         }
 
         Ok(())

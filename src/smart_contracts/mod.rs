@@ -4,6 +4,7 @@ pub mod vm;
 pub mod crypto_verifier;
 pub mod consensus_integration;
 pub mod settlement_contract;
+pub mod mdbx_storage;  // Non-breaking addition
 
 // Legacy settlement data structures (keeping for compatibility)
 pub use settlement::{
@@ -20,6 +21,7 @@ pub use vm::{ContractVM, ExecutionContext, ExecutionResult, Instruction, Contrac
 pub use crypto_verifier::{ZKProofVerifier, BLSVerifier, ContractCryptoVerifier, SettlementProofInputs, CDRPrivacyInputs};
 pub use consensus_integration::{ConsensusContractEngine, ContractTransaction, ContractDeployment, ContractReceipt};
 pub use settlement_contract::{ExecutableSettlementContract, SettlementContractCompiler, SettlementContractFactory};
+pub use mdbx_storage::{MdbxContractStorage, create_mdbx_contract_storage};  // Non-breaking addition
 
 use serde::{Deserialize, Serialize};
 use crate::primitives::{Blake2bHash, NetworkId};

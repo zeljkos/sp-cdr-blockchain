@@ -94,6 +94,28 @@ impl MdbxChainStore {
             }
         }
 
+        // Create smart contract tables
+        if let Err(e) = txn.create_table(Some("contracts"), TableFlags::empty()) {
+            // Ignore error if table already exists
+            if !e.to_string().contains("already exists") {
+                return Err(BlockchainError::Storage(format!("Create contracts table failed: {}", e)));
+            }
+        }
+
+        if let Err(e) = txn.create_table(Some("contract_state"), TableFlags::empty()) {
+            // Ignore error if table already exists
+            if !e.to_string().contains("already exists") {
+                return Err(BlockchainError::Storage(format!("Create contract_state table failed: {}", e)));
+            }
+        }
+
+        if let Err(e) = txn.create_table(Some("execution_results"), TableFlags::empty()) {
+            // Ignore error if table already exists
+            if !e.to_string().contains("already exists") {
+                return Err(BlockchainError::Storage(format!("Create execution_results table failed: {}", e)));
+            }
+        }
+
         txn.commit()
             .map_err(|e| BlockchainError::Storage(format!("Transaction commit failed: {}", e)))?;
 
@@ -136,6 +158,9 @@ impl MdbxChainStore {
 
 #[async_trait::async_trait]
 impl ChainStore for MdbxChainStore {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
     async fn get_block(&self, hash: &Blake2bHash) -> Result<Option<Block>> {
         let store = self.clone();
         let hash = *hash;
@@ -251,6 +276,93 @@ impl ChainStore for MdbxChainStore {
         let store = self.clone();
         tokio::task::spawn_blocking(move || {
             store.mdbx_put("metadata", b"election_head", &serialized)
+        })
+        .await
+        .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?
+    }
+}
+
+// Smart contract storage methods (separate impl block, non-breaking)
+impl MdbxChainStore {
+
+    /// Store contract bytecode
+    pub async fn put_contract_code(&self, contract_address: &Blake2bHash, bytecode: &[u8]) -> Result<()> {
+        let store = self.clone();
+        let contract_address = *contract_address;
+        let bytecode = bytecode.to_vec();
+
+        tokio::task::spawn_blocking(move || {
+            store.mdbx_put("contracts", contract_address.as_bytes(), &bytecode)
+        })
+        .await
+        .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?
+    }
+
+    /// Get contract bytecode
+    pub async fn get_contract_code(&self, contract_address: &Blake2bHash) -> Result<Option<Vec<u8>>> {
+        let store = self.clone();
+        let contract_address = *contract_address;
+
+        tokio::task::spawn_blocking(move || {
+            store.mdbx_get("contracts", contract_address.as_bytes())
+        })
+        .await
+        .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?
+    }
+
+    /// Store contract state value
+    pub async fn put_contract_state(&self, contract_address: &Blake2bHash, key: &Blake2bHash, value: &[u8]) -> Result<()> {
+        let store = self.clone();
+        let state_key = Self::encode_contract_state_key(contract_address, key);
+        let value = value.to_vec();
+
+        tokio::task::spawn_blocking(move || {
+            store.mdbx_put("contract_state", &state_key, &value)
+        })
+        .await
+        .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?
+    }
+
+    /// Get contract state value
+    pub async fn get_contract_state(&self, contract_address: &Blake2bHash, key: &Blake2bHash) -> Result<Option<Vec<u8>>> {
+        let store = self.clone();
+        let state_key = Self::encode_contract_state_key(contract_address, key);
+
+        tokio::task::spawn_blocking(move || {
+            store.mdbx_get("contract_state", &state_key)
+        })
+        .await
+        .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?
+    }
+
+    /// Encode contract state key (contract_address + state_key)
+    fn encode_contract_state_key(contract_address: &Blake2bHash, state_key: &Blake2bHash) -> Vec<u8> {
+        let mut key = Vec::with_capacity(64);
+        key.extend_from_slice(contract_address.as_bytes());
+        key.extend_from_slice(state_key.as_bytes());
+        key
+    }
+
+    /// Store execution result
+    pub async fn put_execution_result(&self, tx_hash: &Blake2bHash, result: &[u8]) -> Result<()> {
+        let store = self.clone();
+        let tx_hash = *tx_hash;
+        let result = result.to_vec();
+
+        tokio::task::spawn_blocking(move || {
+            store.mdbx_put("execution_results", tx_hash.as_bytes(), &result)
+        })
+        .await
+        .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?
+    }
+
+    /// Get execution result
+    pub async fn get_execution_result(&self, tx_hash: &Blake2bHash) -> Result<Option<Vec<u8>>> {
+        let store = self.clone();
+        let tx_hash = *tx_hash;
+
+        tokio::task::spawn_blocking(move || {
+            store.mdbx_get("execution_results", tx_hash.as_bytes())
         })
         .await
         .map_err(|e| BlockchainError::Storage(format!("Task join error: {}", e)))?

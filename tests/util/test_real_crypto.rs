@@ -1,5 +1,5 @@
 // Test to verify real cryptographic key generation works
-use sp_cdr_reconciliation_bc::crypto::bls::PrivateKey;
+use sp_cdr_reconciliation_bc::crypto::PrivateKey;
 
 #[tokio::main]
 async fn main() {
@@ -12,7 +12,7 @@ async fn main() {
     for i in 1..=5 {
         match PrivateKey::generate() {
             Ok(key) => {
-                let bytes = key.as_bytes();
+                let bytes = key.to_bytes();
                 println!("Key {}: {:02x}{:02x}{:02x}{:02x}...{:02x}{:02x}{:02x}{:02x}",
                     i,
                     bytes[0], bytes[1], bytes[2], bytes[3],
@@ -70,18 +70,18 @@ async fn main() {
     // Test signature creation to verify the full pipeline
     println!("\n🔏 Testing Full Cryptographic Pipeline:");
     let key = PrivateKey::generate().expect("Key generation failed");
-    let public_key = key.public_key().expect("Public key derivation failed");
+    let public_key = key.public_key();
 
     // Test message
     let message = b"Hello from SP CDR Blockchain!";
     let message_hash = sp_cdr_reconciliation_bc::primitives::primitives::hash_data(message);
 
-    match key.sign(&message_hash) {
+    match key.sign(message_hash.as_bytes()) {
         Ok(signature) => {
             println!("✅ Message signing successful!");
 
             // Test verification
-            if public_key.verify(&signature, &message_hash) {
+            if public_key.verify(&signature, message_hash.as_bytes()) {
                 println!("✅ Signature verification successful!");
                 println!("✅ Complete cryptographic pipeline is working!");
             } else {

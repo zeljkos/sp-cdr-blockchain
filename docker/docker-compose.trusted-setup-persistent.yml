@@ -1,0 +1,406 @@
+services:
+  # Ceremony Coordinator - manages the multi-party trusted setup
+  setup-coordinator:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.prebuilt
+    container_name: sp-setup-coordinator
+    ports:
+      - "9000:9000"  # Ceremony coordination API
+      - "9001:8081"  # Health check endpoint
+    volumes:
+      # Persistent ceremony state
+      - ../persistent_data/ceremony_coordinator:/app/ceremony
+      # Shared ceremony files (accessible by all participants)
+      - ../persistent_data/shared_ceremony:/app/shared_ceremony
+      # Final ZK keys output (same as blockchain uses)
+      - ../persistent_data/shared_zkp_keys:/app/shared_keys
+    environment:
+      - RUST_LOG=info
+      - CEREMONY_ROLE=coordinator
+      - PARTICIPANTS=tmobile-de,vodafone-uk,orange-fr
+      - MIN_PARTICIPANTS=3
+      - CEREMONY_TIMEOUT=3600  # 1 hour for demo
+      - CEREMONY_PORT=9000
+    command: >
+      sh -c "
+      echo '🎭 Starting Multi-Party Trusted Setup Ceremony Coordinator' &&
+      echo '📂 Ceremony data: /app/ceremony' &&
+      echo '🔗 Shared state: /app/shared_ceremony' &&
+      echo '🔑 Output keys: /app/shared_keys' &&
+      mkdir -p /app/ceremony /app/shared_ceremony /app/shared_keys &&
+      ./target/release/trusted-setup-demo
+      --role coordinator
+      --participants tmobile-de,vodafone-uk,orange-fr
+      --ceremony-dir /app/ceremony
+      --shared-dir /app/shared_ceremony
+      --output-keys-dir /app/shared_keys
+      --bind 0.0.0.0:9000
+      --timeout 3600
+      "
+    networks:
+      sp_blockchain_net:
+        ipv4_address: 172.30.0.100
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # T-Mobile Deutschland Participant
+  participant-tmobile:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.prebuilt
+    container_name: sp-participant-tmobile
+    ports:
+      - "9010:9010"
+      - "9011:8081"
+    volumes:
+      # Private participant data
+      - ../persistent_data/participant_tmobile:/app/participant
+      # Shared ceremony state (read/write)
+      - ../persistent_data/shared_ceremony:/app/shared_ceremony
+      # Final keys (read access)
+      - ../persistent_data/shared_zkp_keys:/app/shared_keys:ro
+    environment:
+      - RUST_LOG=info
+      - CEREMONY_ROLE=participant
+      - PARTICIPANT_ID=tmobile-de
+      - COORDINATOR_URL=http://setup-coordinator:9000
+      - OPERATOR_NAME="T-Mobile Deutschland"
+      - COUNTRY_CODE=DE
+      - PARTICIPANT_PORT=9010
+    command: >
+      sh -c "
+      echo '🇩🇪 T-Mobile Deutschland - Joining Trusted Setup Ceremony' &&
+      echo '⏳ Waiting for coordinator to initialize...' &&
+      sleep 15 &&
+      echo '📂 Participant data: /app/participant' &&
+      mkdir -p /app/participant &&
+      ./target/release/trusted-setup-demo
+      --role participant
+      --participant-id tmobile-de
+      --coordinator-url http://setup-coordinator:9000
+      --participant-dir /app/participant
+      --shared-dir /app/shared_ceremony
+      --operator-name 'T-Mobile Deutschland'
+      --country-code DE
+      --bind 0.0.0.0:9010
+      "
+    depends_on:
+      - setup-coordinator
+    networks:
+      sp_blockchain_net:
+        ipv4_address: 172.30.0.101
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Vodafone UK Participant
+  participant-vodafone:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.prebuilt
+    container_name: sp-participant-vodafone
+    ports:
+      - "9020:9020"
+      - "9021:8081"
+    volumes:
+      # Private participant data
+      - ../persistent_data/participant_vodafone:/app/participant
+      # Shared ceremony state
+      - ../persistent_data/shared_ceremony:/app/shared_ceremony
+      # Final keys (read access)
+      - ../persistent_data/shared_zkp_keys:/app/shared_keys:ro
+    environment:
+      - RUST_LOG=info
+      - CEREMONY_ROLE=participant
+      - PARTICIPANT_ID=vodafone-uk
+      - COORDINATOR_URL=http://setup-coordinator:9000
+      - OPERATOR_NAME="Vodafone Group UK"
+      - COUNTRY_CODE=GB
+      - PARTICIPANT_PORT=9020
+    command: >
+      sh -c "
+      echo '🇬🇧 Vodafone UK - Joining Trusted Setup Ceremony' &&
+      echo '⏳ Waiting for T-Mobile to contribute...' &&
+      sleep 30 &&
+      echo '📂 Participant data: /app/participant' &&
+      mkdir -p /app/participant &&
+      ./target/release/trusted-setup-demo
+      --role participant
+      --participant-id vodafone-uk
+      --coordinator-url http://setup-coordinator:9000
+      --participant-dir /app/participant
+      --shared-dir /app/shared_ceremony
+      --operator-name 'Vodafone Group UK'
+      --country-code GB
+      --bind 0.0.0.0:9020
+      "
+    depends_on:
+      - participant-tmobile
+    networks:
+      sp_blockchain_net:
+        ipv4_address: 172.30.0.102
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Orange France Participant
+  participant-orange:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.prebuilt
+    container_name: sp-participant-orange
+    ports:
+      - "9030:9030"
+      - "9031:8081"
+    volumes:
+      # Private participant data
+      - ../persistent_data/participant_orange:/app/participant
+      # Shared ceremony state
+      - ../persistent_data/shared_ceremony:/app/shared_ceremony
+      # Final keys (read access)
+      - ../persistent_data/shared_zkp_keys:/app/shared_keys:ro
+    environment:
+      - RUST_LOG=info
+      - CEREMONY_ROLE=participant
+      - PARTICIPANT_ID=orange-fr
+      - COORDINATOR_URL=http://setup-coordinator:9000
+      - OPERATOR_NAME="Orange France"
+      - COUNTRY_CODE=FR
+      - PARTICIPANT_PORT=9030
+    command: >
+      sh -c "
+      echo '🇫🇷 Orange France - Joining Trusted Setup Ceremony' &&
+      echo '⏳ Waiting for Vodafone to contribute...' &&
+      sleep 45 &&
+      echo '📂 Participant data: /app/participant' &&
+      mkdir -p /app/participant &&
+      ./target/release/trusted-setup-demo
+      --role participant
+      --participant-id orange-fr
+      --coordinator-url http://setup-coordinator:9000
+      --participant-dir /app/participant
+      --shared-dir /app/shared_ceremony
+      --operator-name 'Orange France'
+      --country-code FR
+      --bind 0.0.0.0:9030
+      "
+    depends_on:
+      - participant-vodafone
+    networks:
+      sp_blockchain_net:
+        ipv4_address: 172.30.0.103
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Independent Ceremony Verifier (simulates external auditor)
+  ceremony-verifier:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.prebuilt
+    container_name: sp-ceremony-verifier
+    ports:
+      - "9100:9100"
+      - "9101:8081"
+    volumes:
+      # Verifier data
+      - ../persistent_data/ceremony_verifier:/app/verifier
+      # Read-only access to ceremony state
+      - ../persistent_data/shared_ceremony:/app/shared_ceremony:ro
+      # Read-only access to final keys
+      - ../persistent_data/shared_zkp_keys:/app/shared_keys:ro
+    environment:
+      - RUST_LOG=info
+      - CEREMONY_ROLE=verifier
+      - COORDINATOR_URL=http://setup-coordinator:9000
+      - VERIFIER_PORT=9100
+    command: >
+      sh -c "
+      echo '🔍 Independent Ceremony Verifier - External Audit' &&
+      echo '⏳ Waiting for all participants to complete contributions...' &&
+      sleep 90 &&
+      echo '📂 Verifier data: /app/verifier' &&
+      echo '🔍 Verifying ceremony transcript and final keys...' &&
+      mkdir -p /app/verifier &&
+      ./target/release/trusted-setup-demo
+      --role verifier
+      --coordinator-url http://setup-coordinator:9000
+      --verifier-dir /app/verifier
+      --shared-dir /app/shared_ceremony
+      --keys-dir /app/shared_keys
+      --bind 0.0.0.0:9100
+      --audit-mode full
+      "
+    depends_on:
+      - participant-orange
+    networks:
+      sp_blockchain_net:
+        ipv4_address: 172.30.0.110
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Blockchain Validator 1 - Uses ceremony output keys
+  validator-1:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.prebuilt
+    container_name: sp-validator-1
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    volumes:
+      # Persistent blockchain data
+      - ../persistent_data/validator-1:/app/data
+      # ZK keys from trusted setup ceremony
+      - ../persistent_data/shared_zkp_keys:/app/shared_keys:ro
+    environment:
+      - VALIDATOR_ID=validator-1
+      - RUST_LOG=info
+      - NETWORK_ID=consortium
+      - USE_CEREMONY_KEYS=true
+    command: >
+      sh -c "
+      echo '⏳ Waiting for trusted setup ceremony to complete...' &&
+      sleep 150 &&
+      echo '🚀 Starting SP CDR Validator 1 (Using Ceremony Keys)' &&
+      echo '🔑 Using ZK keys from: /app/shared_keys' &&
+      if [ -f /app/shared_keys/ceremony_complete.flag ]; then
+        echo '✅ Ceremony keys detected - starting validator'
+        ./target/release/sp-cdr-node start
+        --network consortium
+        --data-dir /app/data
+        --zkp-keys-dir /app/shared_keys
+        --port 8080
+        --bootstrap
+      else
+        echo '❌ Ceremony not complete - waiting...'
+        sleep 60
+        exit 1
+      fi
+      "
+    depends_on:
+      - ceremony-verifier
+    networks:
+      sp_blockchain_net:
+        ipv4_address: 172.30.0.10
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Blockchain Validator 2
+  validator-2:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.prebuilt
+    container_name: sp-validator-2
+    ports:
+      - "8090:8080"
+      - "8091:8081"
+    volumes:
+      - ../persistent_data/validator-2:/app/data
+      - ../persistent_data/shared_zkp_keys:/app/shared_keys:ro
+    environment:
+      - VALIDATOR_ID=validator-2
+      - RUST_LOG=info
+      - NETWORK_ID=consortium
+      - USE_CEREMONY_KEYS=true
+    command: >
+      sh -c "
+      echo '⏳ Waiting for Bootstrap Node...' &&
+      sleep 15 &&
+      echo '🚀 Starting SP CDR Validator 2 (Using Ceremony Keys)' &&
+      ./target/release/sp-cdr-node start
+      --network consortium
+      --data-dir /app/data
+      --zkp-keys-dir /app/shared_keys
+      --port 8080
+      "
+    depends_on:
+      - validator-1
+    networks:
+      sp_blockchain_net:
+        ipv4_address: 172.30.0.11
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Blockchain Validator 3
+  validator-3:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.prebuilt
+    container_name: sp-validator-3
+    ports:
+      - "8100:8080"
+      - "8101:8081"
+    volumes:
+      - ../persistent_data/validator-3:/app/data
+      - ../persistent_data/shared_zkp_keys:/app/shared_keys:ro
+    environment:
+      - VALIDATOR_ID=validator-3
+      - RUST_LOG=info
+      - NETWORK_ID=consortium
+      - USE_CEREMONY_KEYS=true
+    command: >
+      sh -c "
+      echo '⏳ Waiting for Network Formation...' &&
+      sleep 25 &&
+      echo '🚀 Starting SP CDR Validator 3 (Using Ceremony Keys)' &&
+      ./target/release/sp-cdr-node start
+      --network consortium
+      --data-dir /app/data
+      --zkp-keys-dir /app/shared_keys
+      --port 8080
+      "
+    depends_on:
+      - validator-1
+      - validator-2
+    networks:
+      sp_blockchain_net:
+        ipv4_address: 172.30.0.12
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  sp_blockchain_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
+
+# Using host bind mounts for persistent storage
+# Ceremony flow:
+# 1. Coordinator starts and initializes ceremony
+# 2. T-Mobile contributes randomness (15s delay)
+# 3. Vodafone contributes randomness (30s delay)
+# 4. Orange contributes randomness (45s delay)
+# 5. Verifier audits ceremony (90s delay)
+# 6. Validators start using ceremony keys (150s delay)

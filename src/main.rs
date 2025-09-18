@@ -2,7 +2,7 @@
 // Main entry point for running the blockchain node
 
 use clap::{Parser, Subcommand};
-use sp_cdr_reconciliation_bc::{*, cdr_pipeline, storage, blockchain, primitives::Blake2bHash};
+use sp_cdr_reconciliation_bc::{*, bce_pipeline, storage, blockchain, primitives::Blake2bHash};
 use tracing::{info, error};
 use std::sync::Arc;
 
@@ -105,7 +105,7 @@ async fn start_node(network: String, data_dir: String, port: u16, bootstrap: boo
     std::fs::create_dir_all(&data_dir)?;
 
     // Create pipeline configuration
-    let pipeline_config = cdr_pipeline::PipelineConfig {
+    let pipeline_config = bce_pipeline::PipelineConfig {
         keys_dir: std::path::PathBuf::from(format!("{}/zkp_keys", data_dir)),
         batch_size: 1000,
         settlement_threshold_cents: 100, // €1 minimum (demo)
@@ -121,41 +121,23 @@ async fn start_node(network: String, data_dir: String, port: u16, bootstrap: boo
     info!("🏗️  Initializing complete CDR pipeline...");
 
     // Initialize integrated CDR pipeline
-    let mut pipeline = cdr_pipeline::CDRPipeline::new(
+    let mut pipeline = bce_pipeline::BCEPipeline::new(
         network_id.clone(),
         listen_addr,
         pipeline_config,
     ).await?;
 
-    info!("✅ CDR Pipeline initialized successfully");
+    info!("✅ BCE Pipeline initialized successfully");
     info!("🎯 Operator: {:?}", network_id);
     info!("🌐 Listening on port: {}", port);
     info!("💾 Data directory: {}", data_dir);
 
-    // Add some sample CDR data for demonstration
-    if matches!(network_id, NetworkId::SPConsortium) {
-        info!("📋 Adding sample CDR batches for demonstration...");
+    // BCE records will be submitted via the BCE API server
+    // No hardcoded sample data - validators wait for real BCE records from operators
+    info!("📊 BCE Pipeline ready - waiting for BCE records from operator billing systems");
+    info!("📌 Submit BCE records via: POST http://localhost:9090/api/v1/bce/submit");
 
-        // Sample roaming traffic between operators
-        pipeline.add_sample_cdr_batch(
-            NetworkId::new("T-Mobile", "DE"),
-            NetworkId::new("Vodafone", "UK")
-        ).await?;
-
-        pipeline.add_sample_cdr_batch(
-            NetworkId::new("Vodafone", "UK"),
-            NetworkId::new("Orange", "FR")
-        ).await?;
-
-        pipeline.add_sample_cdr_batch(
-            NetworkId::new("Orange", "FR"),
-            NetworkId::new("T-Mobile", "DE")
-        ).await?;
-
-        info!("📊 Sample CDR batches created - settlement processing will begin automatically");
-    }
-
-    info!("🚀 Starting integrated CDR processing pipeline...");
+    info!("🚀 Starting integrated BCE processing pipeline...");
 
     // Start the complete pipeline
     let pipeline_handle = tokio::spawn(async move {
@@ -165,7 +147,7 @@ async fn start_node(network: String, data_dir: String, port: u16, bootstrap: boo
     });
 
     // Wait for shutdown signal
-    info!("✅ CDR Pipeline running - processing CDR batches and settlements");
+    info!("✅ BCE Pipeline running - processing BCE records and settlements");
     info!("Press Ctrl+C to stop...");
 
     tokio::select! {
@@ -193,7 +175,7 @@ async fn generate_validator_keys(output: String) -> Result<()> {
     let voting_key = vec![42u8; 32]; // In real implementation, use Ed25519 key generation
     
     // Create validator key
-    let validator_key = crypto::ValidatorKey::new(
+    let validator_key = crypto::keys::ValidatorKey::new(
         hash_data(b"generated_validator"),
         signing_keypair.public_key.compress(),
         voting_key,
@@ -337,7 +319,7 @@ async fn inspect_blocks(chain_store: &Arc<dyn storage::ChainStore>, id: Option<S
             }
         } else {
             println!("ℹ️  No blocks found. The blockchain is empty or still initializing.");
-            println!("💡 CDR processing creates blocks with settlement transactions.");
+            println!("💡 BCE processing creates blocks with settlement transactions.");
         }
     }
 
@@ -400,7 +382,7 @@ async fn inspect_cdr_data(data_dir: &str, _limit: usize) -> Result<()> {
         println!("⚠️  No ZK setup found at: {}", transcript_path);
     }
 
-    println!("\n💡 CDR processing creates ZK proofs for privacy-preserving reconciliation");
+    println!("\n💡 BCE processing creates ZK proofs for privacy-preserving reconciliation");
     println!("💡 Settlement calculations are verified using these ZK proofs");
 
     Ok(())
@@ -411,7 +393,7 @@ async fn inspect_settlements(data_dir: &str, _limit: usize) -> Result<()> {
     println!("═══════════════════════════════════════════");
 
     println!("📊 Settlement processing happens automatically when:");
-    println!("   • CDR batches are processed by validators");
+    println!("   • BCE records are processed by validators");
     println!("   • Settlement amounts exceed threshold (€100)");
     println!("   • ZK proofs verify CDR calculations");
     println!("   • Multi-party consensus is reached");

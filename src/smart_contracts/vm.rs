@@ -2,6 +2,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use crate::primitives::{Blake2bHash, Result, BlockchainError};
+use super::crypto_verifier::{ContractCryptoVerifier, SettlementProofInputs, CDRPrivacyInputs};
 
 /// Smart contract bytecode instruction set
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -168,6 +169,7 @@ pub struct ContractVM<S: ContractStorage> {
     stack: Vec<u64>,
     call_stack: Vec<usize>,
     program_counter: usize,
+    crypto_verifier: ContractCryptoVerifier,
 }
 
 #[derive(Debug)]
@@ -186,6 +188,17 @@ impl<S: ContractStorage> ContractVM<S> {
             stack: Vec::new(),
             call_stack: Vec::new(),
             program_counter: 0,
+            crypto_verifier: ContractCryptoVerifier::new(),
+        }
+    }
+
+    pub fn new_with_crypto(storage: S, crypto_verifier: ContractCryptoVerifier) -> Self {
+        Self {
+            storage,
+            stack: Vec::new(),
+            call_stack: Vec::new(),
+            program_counter: 0,
+            crypto_verifier,
         }
     }
 
@@ -386,9 +399,13 @@ impl<S: ContractStorage> ContractVM<S> {
                     proof_data.push(self.pop(ctx)? as u8);
                 }
 
-                // Real ZK proof verification would go here
-                // For now, implement basic validation
-                let is_valid = self.verify_zkp_proof(&proof_data)?;
+                // Pop settlement inputs from stack
+                let settlement_amount = self.pop(ctx)?;
+                let exchange_rate = self.pop(ctx)? as u32;
+                let total_charges = self.pop(ctx)?;
+
+                // Real ZK proof verification using ContractCryptoVerifier
+                let is_valid = self.verify_zkp_proof(&proof_data, total_charges, exchange_rate, settlement_amount, ctx)?;
                 self.push(if is_valid { 1 } else { 0 }, ctx)?;
             },
 
@@ -400,8 +417,24 @@ impl<S: ContractStorage> ContractVM<S> {
                     sig_data.push(self.pop(ctx)? as u8);
                 }
 
-                // Real BLS signature verification
-                let is_valid = self.verify_bls_signature(&sig_data, ctx)?;
+                // Pop message length and data from stack
+                let msg_len = self.pop(ctx)? as usize;
+                let mut message_data = Vec::new();
+                for _ in 0..msg_len {
+                    message_data.push(self.pop(ctx)? as u8);
+                }
+
+                // Pop network identifier from stack (encoded as bytes)
+                let network_len = self.pop(ctx)? as usize;
+                let mut network_bytes = Vec::new();
+                for _ in 0..network_len {
+                    network_bytes.push(self.pop(ctx)? as u8);
+                }
+                let network_name = String::from_utf8(network_bytes)
+                    .map_err(|_| BlockchainError::InvalidOperation("Invalid network name".to_string()))?;
+
+                // Real BLS signature verification using ContractCryptoVerifier
+                let is_valid = self.verify_bls_signature(&network_name, &message_data, &sig_data)?;
                 self.push(if is_valid { 1 } else { 0 }, ctx)?;
             },
 
@@ -456,16 +489,41 @@ impl<S: ContractStorage> ContractVM<S> {
         Ok(value)
     }
 
-    fn verify_zkp_proof(&self, _proof_data: &[u8]) -> Result<bool> {
-        // Placeholder for real ZK proof verification
-        // In production, this would use arkworks to verify Groth16 proofs
-        Ok(true)
+    fn verify_zkp_proof(
+        &self,
+        proof_data: &[u8],
+        total_charges: u64,
+        exchange_rate: u32,
+        settlement_amount: u64,
+        ctx: &ExecutionContext
+    ) -> Result<bool> {
+        // Create settlement proof inputs
+        let inputs = SettlementProofInputs {
+            total_charges,
+            exchange_rate,
+            settlement_amount,
+            period_hash: self.derive_period_hash(ctx.timestamp),
+            network_pair_hash: self.derive_network_hash(&ctx.contract_address),
+        };
+
+        // Use real ZK proof verification
+        self.crypto_verifier.zk_verifier().verify_settlement_proof(proof_data, &inputs)
     }
 
-    fn verify_bls_signature(&self, _sig_data: &[u8], _ctx: &ExecutionContext) -> Result<bool> {
-        // Placeholder for real BLS signature verification
-        // In production, this would verify against known operator keys
-        Ok(true)
+    fn verify_bls_signature(&self, network_name: &str, message: &[u8], signature: &[u8]) -> Result<bool> {
+        // Use real BLS signature verification
+        self.crypto_verifier.bls_verifier().verify_operator_signature(network_name, message, signature)
+    }
+
+    fn derive_period_hash(&self, timestamp: u64) -> Blake2bHash {
+        // Derive period hash from timestamp (e.g., monthly periods)
+        let period = timestamp / (30 * 24 * 60 * 60); // 30-day periods
+        crate::primitives::primitives::hash_data(&period.to_le_bytes())
+    }
+
+    fn derive_network_hash(&self, contract_address: &Blake2bHash) -> Blake2bHash {
+        // Use contract address as network pair identifier
+        *contract_address
     }
 }
 

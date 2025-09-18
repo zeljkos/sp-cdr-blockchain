@@ -5,6 +5,8 @@ use crate::blockchain::Block;
 /// Main chain store interface following Albatross patterns
 #[async_trait::async_trait]
 pub trait ChainStore: Send + Sync {
+    /// Enable downcasting to concrete types
+    fn as_any(&self) -> &dyn std::any::Any;
     /// Get block by hash
     async fn get_block(&self, hash: &Blake2bHash) -> Result<Option<Block>>;
 
@@ -48,6 +50,9 @@ impl SimpleChainStore {
 
 #[async_trait::async_trait]
 impl ChainStore for SimpleChainStore {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
     async fn get_block(&self, _hash: &Blake2bHash) -> Result<Option<Block>> {
         Ok(None)
     }

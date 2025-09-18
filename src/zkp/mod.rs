@@ -1,11 +1,8 @@
 // Zero-knowledge proof components for SP CDR reconciliation blockchain
 // Based on Nimiq's Albatross ZKP system adapted for CDR privacy
 
-pub use proof_system::*;
 pub use verifying_key::*;
 pub use albatross_zkp::*;
-
-pub(crate) mod proof_system;
 pub mod verifying_key;
 pub mod albatross_zkp;
 pub mod circuits;

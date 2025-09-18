@@ -44,6 +44,7 @@ where
 use crate::primitives::{Blake2bHash, NetworkId, BlockchainError, Height};
 use crate::blockchain::{Block, Transaction};
 use crate::network::{SPNetworkMessage, NetworkCommand};
+use crate::crypto::bls::{BLSPrivateKey, BLSPublicKey, BLSSignature, BLSVerifier};
 
 /// Consensus message types for SP blockchain
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -148,6 +149,10 @@ pub struct ConsensusNetwork {
     // Consensus parameters
     timeout_duration: std::time::Duration,
     min_validators: usize,
+
+    // BLS cryptography for validator signatures
+    validator_private_key: BLSPrivateKey,
+    bls_verifier: BLSVerifier,
 }
 
 impl ConsensusNetwork {
@@ -157,6 +162,8 @@ impl ConsensusNetwork {
         validators: HashSet<PeerId>,
         validator_weights: HashMap<PeerId, u64>,
         command_sender: broadcast::Sender<NetworkCommand>,
+        validator_private_key: BLSPrivateKey,
+        validator_public_keys: HashMap<PeerId, BLSPublicKey>,
     ) -> Self {
         let state = ConsensusState {
             current_round: 0,
@@ -169,6 +176,12 @@ impl ConsensusNetwork {
             validator_weights,
         };
 
+        // Initialize BLS verifier with validator public keys
+        let mut bls_verifier = BLSVerifier::new();
+        for (peer_id, public_key) in validator_public_keys {
+            bls_verifier.register_operator(&peer_id.to_string(), public_key);
+        }
+
         Self {
             state: RwLock::new(state),
             command_sender,
@@ -176,6 +189,8 @@ impl ConsensusNetwork {
             local_peer_id,
             timeout_duration: std::time::Duration::from_secs(30),
             min_validators: 3,
+            validator_private_key,
+            bls_verifier,
         }
     }
 
@@ -204,12 +219,20 @@ impl ConsensusNetwork {
         state.proposed_block = Some(block.clone());
         state.phase = ConsensusPhase::PreVote;
 
-        // Broadcast proposal
+        // Create message to sign (block hash + round)
+        let mut message_to_sign = block_hash.as_bytes().to_vec();
+        message_to_sign.extend_from_slice(&state.current_round.to_le_bytes());
+
+        // Sign with validator's BLS private key
+        let signature = self.validator_private_key.sign(&message_to_sign)
+            .map_err(|e| BlockchainError::Crypto(format!("Failed to sign proposal: {:?}", e)))?;
+
+        // Broadcast proposal with real signature
         let proposal = ConsensusMessage::Propose {
             block,
             proposer_id: self.local_peer_id,
             round: state.current_round,
-            signature: vec![], // Would sign with validator key
+            signature: signature.to_bytes().to_vec(),
         };
 
         self.broadcast_consensus_message(proposal).await?;
@@ -256,7 +279,7 @@ impl ConsensusNetwork {
         block: Block,
         proposer_id: PeerId,
         round: u64,
-        _signature: Vec<u8>,
+        signature: Vec<u8>,
         _from_peer: PeerId,
     ) -> std::result::Result<(), BlockchainError> {
         let mut state = self.state.write().await;
@@ -277,7 +300,23 @@ impl ConsensusNetwork {
             return Ok(());
         }
 
-        info!("Received valid proposal from {} for round {}", proposer_id, round);
+        // Verify BLS signature on proposal
+        let block_hash = block.hash();
+        let mut message_to_verify = block_hash.as_bytes().to_vec();
+        message_to_verify.extend_from_slice(&round.to_le_bytes());
+
+        let signature_valid = self.bls_verifier.verify_operator_signature(
+            &proposer_id.to_string(),
+            &message_to_verify,
+            &signature,
+        ).unwrap_or(false);
+
+        if !signature_valid {
+            warn!("Invalid BLS signature on proposal from {}", proposer_id);
+            return Ok(());
+        }
+
+        info!("Received valid signed proposal from {} for round {}", proposer_id, round);
 
         // Validate block
         if self.validate_block(&block).await? {
@@ -287,12 +326,20 @@ impl ConsensusNetwork {
 
             let block_hash = block.hash();
 
-            // Send pre-vote
+            // Create message to sign for pre-vote (block hash + round + "prevote")
+            let mut prevote_message = block_hash.as_bytes().to_vec();
+            prevote_message.extend_from_slice(&round.to_le_bytes());
+            prevote_message.extend_from_slice(b"prevote");
+
+            let prevote_signature = self.validator_private_key.sign(&prevote_message)
+                .map_err(|e| BlockchainError::Crypto(format!("Failed to sign pre-vote: {:?}", e)))?;
+
+            // Send pre-vote with real BLS signature
             let pre_vote = ConsensusMessage::PreVote {
                 block_hash,
                 round,
                 voter_id: self.local_peer_id,
-                signature: vec![], // Would sign with validator key
+                signature: prevote_signature.to_bytes().to_vec(),
             };
 
             self.broadcast_consensus_message(pre_vote).await?;
@@ -318,7 +365,7 @@ impl ConsensusNetwork {
         block_hash: Blake2bHash,
         round: u64,
         voter_id: PeerId,
-        _signature: Vec<u8>,
+        signature: Vec<u8>,
     ) -> std::result::Result<(), BlockchainError> {
         let mut state = self.state.write().await;
 
@@ -328,6 +375,22 @@ impl ConsensusNetwork {
 
         if !state.validators.contains(&voter_id) {
             warn!("Pre-vote from non-validator: {}", voter_id);
+            return Ok(());
+        }
+
+        // Verify BLS signature on pre-vote
+        let mut prevote_message = block_hash.as_bytes().to_vec();
+        prevote_message.extend_from_slice(&round.to_le_bytes());
+        prevote_message.extend_from_slice(b"prevote");
+
+        let signature_valid = self.bls_verifier.verify_operator_signature(
+            &voter_id.to_string(),
+            &prevote_message,
+            &signature,
+        ).unwrap_or(false);
+
+        if !signature_valid {
+            warn!("Invalid BLS signature on pre-vote from {}", voter_id);
             return Ok(());
         }
 
@@ -348,12 +411,20 @@ impl ConsensusNetwork {
 
                 state.phase = ConsensusPhase::PreCommit;
 
-                // Send pre-commit
+                // Create message to sign for pre-commit (block hash + round + "precommit")
+                let mut precommit_message = proposed_hash.as_bytes().to_vec();
+                precommit_message.extend_from_slice(&round.to_le_bytes());
+                precommit_message.extend_from_slice(b"precommit");
+
+                let precommit_signature = self.validator_private_key.sign(&precommit_message)
+                    .map_err(|e| BlockchainError::Crypto(format!("Failed to sign pre-commit: {:?}", e)))?;
+
+                // Send pre-commit with real BLS signature
                 let pre_commit = ConsensusMessage::PreCommit {
                     block_hash: proposed_hash,
                     round,
                     voter_id: self.local_peer_id,
-                    signature: vec![],
+                    signature: precommit_signature.to_bytes().to_vec(),
                 };
 
                 self.broadcast_consensus_message(pre_commit).await?;
@@ -369,7 +440,7 @@ impl ConsensusNetwork {
         block_hash: Blake2bHash,
         round: u64,
         voter_id: PeerId,
-        _signature: Vec<u8>,
+        signature: Vec<u8>,
     ) -> std::result::Result<(), BlockchainError> {
         let mut state = self.state.write().await;
 
@@ -378,6 +449,23 @@ impl ConsensusNetwork {
         }
 
         if !state.validators.contains(&voter_id) {
+            warn!("Pre-commit from non-validator: {}", voter_id);
+            return Ok(());
+        }
+
+        // Verify BLS signature on pre-commit
+        let mut precommit_message = block_hash.as_bytes().to_vec();
+        precommit_message.extend_from_slice(&round.to_le_bytes());
+        precommit_message.extend_from_slice(b"precommit");
+
+        let signature_valid = self.bls_verifier.verify_operator_signature(
+            &voter_id.to_string(),
+            &precommit_message,
+            &signature,
+        ).unwrap_or(false);
+
+        if !signature_valid {
+            warn!("Invalid BLS signature on pre-commit from {}", voter_id);
             return Ok(());
         }
 

@@ -1,551 +1,424 @@
-// BLS signature implementation for SP CDR reconciliation
-// Adapted from Nimiq's BLS implementation for validator consensus
+// Real BLS signature implementation using blst crate
+// Production-grade BLS12-381 signatures for SP consortium
 
-use std::fmt;
+use blst::{
+    min_pk::{SecretKey, PublicKey, Signature, AggregatePublicKey, AggregateSignature},
+    BLST_ERROR, blst_scalar_from_bendian, blst_bendian_from_scalar,
+};
+use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
-use crate::primitives::Blake2bHash;
-use super::{CryptoError, Result};
+use crate::primitives::{Blake2bHash, Result, BlockchainError};
 
-/// BLS signature type using Blake2b hash
-pub type SigHash = Blake2bHash;
+// Domain Separation Tag for SP consortium
+const DST: &[u8] = b"SP_CDR_CONSORTIUM_BLS_SIG";
 
-/// BLS private key (32 bytes)
-#[derive(Clone, PartialEq, Eq)]
-pub struct PrivateKey {
-    key: [u8; 32],
+/// Real BLS private key using blst
+#[derive(Clone, Debug)]
+pub struct BLSPrivateKey {
+    secret_key: SecretKey,
 }
 
-impl PrivateKey {
-    /// Generate a new random private key
+/// Real BLS public key using blst
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BLSPublicKey {
+    #[serde(with = "hex")]
+    compressed: [u8; 48], // BLS12-381 G1 compressed point
+}
+
+/// Real BLS signature using blst
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BLSSignature {
+    #[serde(with = "hex")]
+    compressed: [u8; 96], // BLS12-381 G2 compressed point
+}
+
+/// BLS aggregate signature for multi-party signing
+#[derive(Clone, Debug)]
+pub struct BLSAggregateSignature {
+    signature: AggregateSignature,
+}
+
+/// BLS aggregate public key for multi-party verification
+#[derive(Clone, Debug)]
+pub struct BLSAggregatePublicKey {
+    public_key: AggregatePublicKey,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum BLSError {
+    #[error("Invalid private key")]
+    InvalidPrivateKey,
+    #[error("Invalid public key")]
+    InvalidPublicKey,
+    #[error("Invalid signature")]
+    InvalidSignature,
+    #[error("Key generation failed: {0}")]
+    KeyGenerationFailed(String),
+    #[error("Signature verification failed")]
+    VerificationFailed,
+    #[error("Aggregation failed: {0}")]
+    AggregationFailed(String),
+}
+
+impl BLSPrivateKey {
+    /// Generate a new random BLS private key
     pub fn generate() -> Result<Self> {
-        let mut key = [0u8; 32];
+        let mut ikm = [0u8; 32];
+        getrandom::getrandom(&mut ikm)
+            .map_err(|e| BlockchainError::Crypto(format!("RNG failed: {}", e)))?;
 
-        // Use cryptographically secure RNG
-        getrandom::getrandom(&mut key).map_err(|e|
-            CryptoError::KeyGenerationFailed(e.to_string()))?;
+        let secret_key = SecretKey::key_gen(&ikm, &[])
+            .map_err(|_| BlockchainError::Crypto("BLS key generation failed".to_string()))?;
 
-        // Ensure key is not zero (extremely unlikely but good practice)
-        if key.iter().all(|&b| b == 0) {
-            // If we get all zeros (probability: 1 in 2^256), try again
-            getrandom::getrandom(&mut key).map_err(|e|
-                CryptoError::KeyGenerationFailed(e.to_string()))?;
-        }
-
-        Ok(Self { key })
+        Ok(Self { secret_key })
     }
 
-    /// Create private key from bytes
+    /// Create private key from bytes (for deterministic keys)
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         if bytes.len() != 32 {
-            return Err(CryptoError::InvalidPrivateKey);
+            return Err(BlockchainError::Crypto("BLS private key must be 32 bytes".to_string()));
         }
 
-        let mut key = [0u8; 32];
-        key.copy_from_slice(bytes);
-        
-        // Validate key is not zero
-        if key.iter().all(|&b| b == 0) {
-            return Err(CryptoError::InvalidPrivateKey);
-        }
+        let secret_key = SecretKey::key_gen(bytes, &[])
+            .map_err(|_| BlockchainError::Crypto("Invalid BLS private key bytes".to_string()))?;
 
-        Ok(Self { key })
+        Ok(Self { secret_key })
     }
 
     /// Get the corresponding public key
-    pub fn public_key(&self) -> Result<PublicKey> {
-        // In a real BLS implementation, this would derive the public key
-        // from the private key using elliptic curve operations
-        PublicKey::from_private_key(self)
-    }
-
-    /// Sign a message hash
-    pub fn sign(&self, message_hash: &SigHash) -> Result<Signature> {
-        Signature::create(self, message_hash)
-    }
-
-    /// Get raw key bytes
-    pub fn as_bytes(&self) -> &[u8; 32] {
-        &self.key
-    }
-}
-
-impl fmt::Debug for PrivateKey {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "PrivateKey([REDACTED])")
-    }
-}
-
-/// BLS public key (48 bytes compressed)
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct PublicKey {
-    key: [u8; 48],
-}
-
-impl serde::Serialize for PublicKey {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_bytes(&self.key)
-    }
-}
-
-impl<'de> serde::Deserialize<'de> for PublicKey {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let bytes = Vec::<u8>::deserialize(deserializer)?;
-        if bytes.len() != 48 {
-            return Err(serde::de::Error::custom("Invalid public key length"));
+    pub fn public_key(&self) -> BLSPublicKey {
+        let pubkey = self.secret_key.sk_to_pk();
+        BLSPublicKey {
+            compressed: pubkey.compress(),
         }
-        let mut key = [0u8; 48];
-        key.copy_from_slice(&bytes);
-        Ok(PublicKey { key })
+    }
+
+    /// Sign a message with this private key
+    pub fn sign(&self, message: &[u8]) -> Result<BLSSignature> {
+        let signature = self.secret_key.sign(message, DST, &[]);
+
+        Ok(BLSSignature {
+            compressed: signature.compress(),
+        })
+    }
+
+    /// Export private key bytes (for storage - handle with care!)
+    pub fn to_bytes(&self) -> [u8; 32] {
+        self.secret_key.to_bytes()
     }
 }
 
-impl PublicKey {
-    /// Create public key from private key
-    pub fn from_private_key(private_key: &PrivateKey) -> Result<Self> {
-        // In real BLS implementation, derive public key from private key
-        let mut key = [0u8; 48];
-        
-        // Mock derivation - in reality use BLS12-381 point multiplication
-        key[0..32].copy_from_slice(&private_key.key);
-        key[32] = 0x01; // Mark as derived
-        
-        Ok(Self { key })
-    }
-
-    /// Create public key from bytes
+impl BLSPublicKey {
+    /// Create public key from compressed bytes
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         if bytes.len() != 48 {
-            return Err(CryptoError::InvalidPublicKey);
+            return Err(BlockchainError::Crypto("BLS public key must be 48 bytes".to_string()));
         }
 
-        let mut key = [0u8; 48];
-        key.copy_from_slice(bytes);
-        
-        Ok(Self { key })
+        let mut compressed = [0u8; 48];
+        compressed.copy_from_slice(bytes);
+
+        // Validate the public key
+        let pubkey = PublicKey::from_bytes(&compressed)
+            .map_err(|_| BlockchainError::Crypto("Invalid BLS public key".to_string()))?;
+
+        // Note: blst::PublicKey::from_bytes already validates the key
+        // so if we reach here, the key is valid
+
+        Ok(Self { compressed })
     }
 
-    /// Verify a signature against this public key
-    pub fn verify(&self, signature: &Signature, message_hash: &SigHash) -> bool {
-        signature.verify(self, message_hash).unwrap_or(false)
+    /// Get compressed public key bytes
+    pub fn to_bytes(&self) -> &[u8; 48] {
+        &self.compressed
     }
 
-    /// Get raw key bytes
-    pub fn as_bytes(&self) -> &[u8; 48] {
-        &self.key
-    }
-
-    /// Convert to compressed representation for storage
-    pub fn compress(&self) -> CompressedPublicKey {
-        CompressedPublicKey {
-            key: self.key,
-        }
-    }
-}
-
-/// Compressed public key for efficient storage
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct CompressedPublicKey {
-    key: [u8; 48],
-}
-
-impl serde::Serialize for CompressedPublicKey {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_bytes(&self.key)
+    /// Convert to hex string for display/storage
+    pub fn to_hex(&self) -> String {
+        hex::encode(self.compressed)
     }
 }
 
-impl<'de> serde::Deserialize<'de> for CompressedPublicKey {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let bytes = Vec::<u8>::deserialize(deserializer)?;
-        if bytes.len() != 48 {
-            return Err(serde::de::Error::custom("Invalid compressed public key length"));
-        }
-        let mut key = [0u8; 48];
-        key.copy_from_slice(&bytes);
-        Ok(CompressedPublicKey { key })
-    }
-}
-
-impl CompressedPublicKey {
-    /// Decompress to full public key
-    pub fn decompress(&self) -> Result<PublicKey> {
-        PublicKey::from_bytes(&self.key)
-    }
-
-    /// Get raw compressed bytes
-    pub fn as_bytes(&self) -> &[u8; 48] {
-        &self.key
-    }
-}
-
-/// BLS signature (96 bytes)
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Signature {
-    sig: [u8; 96],
-}
-
-impl serde::Serialize for Signature {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_bytes(&self.sig)
-    }
-}
-
-impl<'de> serde::Deserialize<'de> for Signature {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let bytes = Vec::<u8>::deserialize(deserializer)?;
-        if bytes.len() != 96 {
-            return Err(serde::de::Error::custom("Invalid signature length"));
-        }
-        let mut sig = [0u8; 96];
-        sig.copy_from_slice(&bytes);
-        Ok(Signature { sig })
-    }
-}
-
-impl Signature {
-    /// Create signature from private key and message hash
-    pub fn create(private_key: &PrivateKey, message_hash: &SigHash) -> Result<Self> {
-        // In real BLS implementation, this would perform BLS signing
-        let mut sig = [0u8; 96];
-        
-        // Mock signature generation
-        sig[0..32].copy_from_slice(private_key.as_bytes());
-        sig[32..64].copy_from_slice(message_hash.as_bytes());
-        sig[64] = 0x42; // Mock signature marker
-        
-        Ok(Self { sig })
-    }
-
-    /// Create signature from bytes
+impl BLSSignature {
+    /// Create signature from compressed bytes
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         if bytes.len() != 96 {
-            return Err(CryptoError::InvalidSignature);
+            return Err(BlockchainError::Crypto("BLS signature must be 96 bytes".to_string()));
         }
 
-        let mut sig = [0u8; 96];
-        sig.copy_from_slice(bytes);
-        
-        Ok(Self { sig })
+        let mut compressed = [0u8; 96];
+        compressed.copy_from_slice(bytes);
+
+        // Validate the signature format
+        let _signature = Signature::from_bytes(&compressed)
+            .map_err(|_| BlockchainError::Crypto("Invalid BLS signature format".to_string()))?;
+
+        Ok(Self { compressed })
     }
 
     /// Verify signature against public key and message
-    pub fn verify(&self, public_key: &PublicKey, message_hash: &SigHash) -> Result<bool> {
-        // In real BLS implementation, this would use pairing-based verification
-        
-        // Mock verification - check that signature contains expected data
-        if self.sig[64] != 0x42 {
-            return Ok(false);
+    pub fn verify(&self, public_key: &BLSPublicKey, message: &[u8]) -> Result<bool> {
+        let pubkey = PublicKey::from_bytes(&public_key.compressed)
+            .map_err(|_| BlockchainError::Crypto("Invalid public key for verification".to_string()))?;
+
+        let signature = Signature::from_bytes(&self.compressed)
+            .map_err(|_| BlockchainError::Crypto("Invalid signature for verification".to_string()))?;
+
+        let result = signature.verify(true, message, DST, &[], &pubkey, true);
+        Ok(result == BLST_ERROR::BLST_SUCCESS)
+    }
+
+    /// Get compressed signature bytes
+    pub fn to_bytes(&self) -> &[u8; 96] {
+        &self.compressed
+    }
+
+    /// Convert to hex string for display/storage
+    pub fn to_hex(&self) -> String {
+        hex::encode(self.compressed)
+    }
+}
+
+/// BLS Verifier for SP consortium operations
+pub struct BLSVerifier {
+    /// Known public keys for SP operators
+    sp_operators: HashMap<String, BLSPublicKey>,
+}
+
+impl BLSVerifier {
+    pub fn new() -> Self {
+        Self {
+            sp_operators: HashMap::new(),
+        }
+    }
+
+    /// Register an SP operator's public key
+    pub fn register_operator(&mut self, operator_name: &str, public_key: BLSPublicKey) {
+        self.sp_operators.insert(operator_name.to_string(), public_key);
+    }
+
+    /// Verify operator signature for CDR/settlement data
+    pub fn verify_operator_signature(
+        &self,
+        operator_name: &str,
+        message: &[u8],
+        signature_bytes: &[u8],
+    ) -> Result<bool> {
+        let public_key = self.sp_operators.get(operator_name)
+            .ok_or_else(|| BlockchainError::Crypto(format!("Unknown operator: {}", operator_name)))?;
+
+        let signature = BLSSignature::from_bytes(signature_bytes)?;
+        signature.verify(public_key, message)
+    }
+
+    /// Verify multi-party signature from multiple operators
+    pub fn verify_multi_party_signature(
+        &self,
+        operator_names: &[String],
+        message: &[u8],
+        aggregate_signature_bytes: &[u8],
+    ) -> Result<bool> {
+        if operator_names.is_empty() {
+            return Err(BlockchainError::Crypto("No operators specified".to_string()));
         }
 
-        // Check message hash is embedded (mock check)
-        let embedded_hash = &self.sig[32..64];
-        if embedded_hash != message_hash.as_bytes() {
-            return Ok(false);
+        // Collect public keys
+        let mut public_keys = Vec::new();
+        for operator_name in operator_names {
+            let pubkey = self.sp_operators.get(operator_name)
+                .ok_or_else(|| BlockchainError::Crypto(format!("Unknown operator: {}", operator_name)))?;
+
+            let blst_pubkey = PublicKey::from_bytes(&pubkey.compressed)
+                .map_err(|_| BlockchainError::Crypto("Invalid operator public key".to_string()))?;
+
+            public_keys.push(blst_pubkey);
         }
 
-        Ok(true)
-    }
-
-    /// Get raw signature bytes
-    pub fn as_bytes(&self) -> &[u8; 96] {
-        &self.sig
-    }
-
-    /// Compress signature for storage
-    pub fn compress(&self) -> CompressedSignature {
-        CompressedSignature {
-            sig: self.sig,
-        }
-    }
-}
-
-/// Compressed signature for efficient storage
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct CompressedSignature {
-    sig: [u8; 96],
-}
-
-impl serde::Serialize for CompressedSignature {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_bytes(&self.sig)
-    }
-}
-
-impl<'de> serde::Deserialize<'de> for CompressedSignature {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let bytes = Vec::<u8>::deserialize(deserializer)?;
-        if bytes.len() != 96 {
-            return Err(serde::de::Error::custom("Invalid compressed signature length"));
-        }
-        let mut sig = [0u8; 96];
-        sig.copy_from_slice(&bytes);
-        Ok(CompressedSignature { sig })
-    }
-}
-
-impl CompressedSignature {
-    /// Decompress to full signature
-    pub fn decompress(&self) -> Result<Signature> {
-        Signature::from_bytes(&self.sig)
-    }
-
-    /// Get raw compressed bytes
-    pub fn as_bytes(&self) -> &[u8; 96] {
-        &self.sig
-    }
-}
-
-/// Aggregate public key for multi-signature verification
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct AggregatePublicKey {
-    agg_key: [u8; 48],
-}
-
-impl serde::Serialize for AggregatePublicKey {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_bytes(&self.agg_key)
-    }
-}
-
-impl<'de> serde::Deserialize<'de> for AggregatePublicKey {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let bytes = Vec::<u8>::deserialize(deserializer)?;
-        if bytes.len() != 48 {
-            return Err(serde::de::Error::custom("Invalid aggregate public key length"));
-        }
-        let mut agg_key = [0u8; 48];
-        agg_key.copy_from_slice(&bytes);
-        Ok(AggregatePublicKey { agg_key })
-    }
-}
-
-impl AggregatePublicKey {
-    /// Create aggregate public key from individual public keys
-    pub fn aggregate(public_keys: &[PublicKey]) -> Result<Self> {
-        if public_keys.is_empty() {
-            return Err(CryptoError::AggregationFailed("No keys to aggregate".to_string()));
-        }
-
-        // In real BLS implementation, this would sum the public keys
-        let mut agg_key = [0u8; 48];
-        
-        // Mock aggregation - XOR all keys (not cryptographically sound)
-        for public_key in public_keys {
-            for (i, byte) in public_key.as_bytes().iter().enumerate() {
-                agg_key[i] ^= byte;
+        // Aggregate public keys using the correct blst API
+        let agg_pubkey = match public_keys.len() {
+            0 => return Err(BlockchainError::Crypto("No public keys to aggregate".to_string())),
+            1 => public_keys[0].clone(),
+            _ => {
+                let mut iter = public_keys.iter();
+                let first = iter.next().unwrap();
+                let mut agg = AggregatePublicKey::from_public_key(first);
+                for pk in iter {
+                    agg.add_public_key(pk, true).map_err(|_| BlockchainError::Crypto("Public key aggregation failed".to_string()))?;
+                }
+                agg.to_public_key()
             }
-        }
-        
-        Ok(Self { agg_key })
-    }
+        };
 
-    /// Verify aggregate signature
-    pub fn verify(&self, signature: &AggregateSignature, message_hash: &SigHash) -> bool {
-        signature.verify(self, message_hash).unwrap_or(false)
-    }
+        // Verify aggregate signature
+        let signature = Signature::from_bytes(aggregate_signature_bytes)
+            .map_err(|_| BlockchainError::Crypto("Invalid aggregate signature".to_string()))?;
 
-    /// Get raw aggregated key bytes
-    pub fn as_bytes(&self) -> &[u8; 48] {
-        &self.agg_key
+        let result = signature.verify(true, message, DST, &[], &agg_pubkey, true);
+        Ok(result == BLST_ERROR::BLST_SUCCESS)
     }
 }
 
-/// Aggregate signature for multi-signature schemes
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct AggregateSignature {
-    agg_sig: [u8; 96],
-}
-
-impl serde::Serialize for AggregateSignature {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_bytes(&self.agg_sig)
+/// Aggregate multiple BLS signatures into one
+pub fn aggregate_signatures(signatures: &[BLSSignature]) -> Result<BLSSignature> {
+    if signatures.is_empty() {
+        return Err(BlockchainError::Crypto("No signatures to aggregate".to_string()));
     }
-}
 
-impl<'de> serde::Deserialize<'de> for AggregateSignature {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let bytes = Vec::<u8>::deserialize(deserializer)?;
-        if bytes.len() != 96 {
-            return Err(serde::de::Error::custom("Invalid aggregate signature length"));
-        }
-        let mut agg_sig = [0u8; 96];
-        agg_sig.copy_from_slice(&bytes);
-        Ok(AggregateSignature { agg_sig })
+    let mut blst_signatures = Vec::new();
+    for sig in signatures {
+        let blst_sig = Signature::from_bytes(&sig.compressed)
+            .map_err(|_| BlockchainError::Crypto("Invalid signature for aggregation".to_string()))?;
+        blst_signatures.push(blst_sig);
     }
-}
 
-impl AggregateSignature {
-    /// Create aggregate signature from individual signatures
-    pub fn aggregate(signatures: &[Signature]) -> Result<Self> {
-        if signatures.is_empty() {
-            return Err(CryptoError::AggregationFailed("No signatures to aggregate".to_string()));
-        }
-
-        // In real BLS implementation, this would sum the signatures
-        let mut agg_sig = [0u8; 96];
-        
-        // Mock aggregation
-        for signature in signatures {
-            for (i, byte) in signature.as_bytes().iter().enumerate() {
-                agg_sig[i] ^= byte;
+    let aggregate = match blst_signatures.len() {
+        0 => return Err(BlockchainError::Crypto("No signatures to aggregate".to_string())),
+        1 => blst_signatures[0].clone(),
+        _ => {
+            let mut iter = blst_signatures.iter();
+            let first = iter.next().unwrap();
+            let mut agg = AggregateSignature::from_signature(first);
+            for sig in iter {
+                agg.add_signature(sig, true).map_err(|_| BlockchainError::Crypto("Signature aggregation failed".to_string()))?;
             }
+            agg.to_signature()
         }
-        
-        Ok(Self { agg_sig })
+    };
+
+    Ok(BLSSignature {
+        compressed: aggregate.compress(),
+    })
+}
+
+/// Aggregate multiple BLS public keys into one
+pub fn aggregate_public_keys(public_keys: &[BLSPublicKey]) -> Result<BLSPublicKey> {
+    if public_keys.is_empty() {
+        return Err(BlockchainError::Crypto("No public keys to aggregate".to_string()));
     }
 
-    /// Verify aggregate signature against aggregate public key
-    pub fn verify(&self, agg_public_key: &AggregatePublicKey, message_hash: &SigHash) -> Result<bool> {
-        // In real BLS implementation, use pairing-based verification
-        
-        // Mock verification
-        if self.agg_sig[95] == 0 {
-            return Ok(false);
-        }
-        
-        Ok(true)
+    let mut blst_pubkeys = Vec::new();
+    for pubkey in public_keys {
+        let blst_pubkey = PublicKey::from_bytes(&pubkey.compressed)
+            .map_err(|_| BlockchainError::Crypto("Invalid public key for aggregation".to_string()))?;
+        blst_pubkeys.push(blst_pubkey);
     }
 
-    /// Create aggregate signature from bytes
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        if bytes.len() != 96 {
-            return Err(CryptoError::InvalidSignature);
+    let aggregate = match blst_pubkeys.len() {
+        0 => return Err(BlockchainError::Crypto("No public keys to aggregate".to_string())),
+        1 => blst_pubkeys[0].clone(),
+        _ => {
+            let mut iter = blst_pubkeys.iter();
+            let first = iter.next().unwrap();
+            let mut agg = AggregatePublicKey::from_public_key(first);
+            for pk in iter {
+                agg.add_public_key(pk, true).map_err(|_| BlockchainError::Crypto("Public key aggregation failed".to_string()))?;
+            }
+            agg.to_public_key()
         }
-        let mut agg_sig = [0u8; 96];
-        agg_sig.copy_from_slice(bytes);
-        Ok(Self { agg_sig })
-    }
+    };
 
-    /// Get raw aggregate signature bytes
-    pub fn as_bytes(&self) -> &[u8; 96] {
-        &self.agg_sig
-    }
+    Ok(BLSPublicKey {
+        compressed: aggregate.compress(),
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::primitives::hash_data;
 
     #[test]
-    fn test_key_generation() {
-        let private_key = PrivateKey::generate().unwrap();
-        let public_key = private_key.public_key().unwrap();
-        
-        assert_eq!(private_key.as_bytes().len(), 32);
-        assert_eq!(public_key.as_bytes().len(), 48);
+    fn test_bls_key_generation() {
+        let private_key = BLSPrivateKey::generate().unwrap();
+        let public_key = private_key.public_key();
+
+        // Keys should be valid sizes
+        assert_eq!(private_key.to_bytes().len(), 32);
+        assert_eq!(public_key.to_bytes().len(), 48);
     }
 
     #[test]
-    fn test_signature_creation_and_verification() {
-        let private_key = PrivateKey::generate().unwrap();
-        let public_key = private_key.public_key().unwrap();
-        
-        let message = b"SP CDR reconciliation test message";
-        let message_hash = hash_data(message);
-        
-        let signature = private_key.sign(&message_hash).unwrap();
-        assert!(public_key.verify(&signature, &message_hash));
-        
-        // Wrong message should fail verification
-        let wrong_hash = hash_data(b"different message");
-        assert!(!public_key.verify(&signature, &wrong_hash));
+    fn test_bls_sign_and_verify() {
+        let private_key = BLSPrivateKey::generate().unwrap();
+        let public_key = private_key.public_key();
+
+        let message = b"SP Consortium Settlement Batch 001";
+        let signature = private_key.sign(message).unwrap();
+
+        // Signature should verify correctly
+        assert!(signature.verify(&public_key, message).unwrap());
+
+        // Should fail with wrong message
+        let wrong_message = b"Different message";
+        assert!(!signature.verify(&public_key, wrong_message).unwrap());
     }
 
     #[test]
-    fn test_key_serialization() {
-        let private_key = PrivateKey::generate().unwrap();
-        let public_key = private_key.public_key().unwrap();
-        
-        // Test private key roundtrip
-        let private_bytes = private_key.as_bytes();
-        let restored_private = PrivateKey::from_bytes(private_bytes).unwrap();
-        assert_eq!(private_key, restored_private);
-        
-        // Test public key roundtrip
-        let public_bytes = public_key.as_bytes();
-        let restored_public = PublicKey::from_bytes(public_bytes).unwrap();
-        assert_eq!(public_key, restored_public);
+    fn test_bls_signature_aggregation() {
+        // Generate three key pairs (T-Mobile, Vodafone, Orange)
+        let tmobile_sk = BLSPrivateKey::generate().unwrap();
+        let vodafone_sk = BLSPrivateKey::generate().unwrap();
+        let orange_sk = BLSPrivateKey::generate().unwrap();
+
+        let tmobile_pk = tmobile_sk.public_key();
+        let vodafone_pk = vodafone_sk.public_key();
+        let orange_pk = orange_sk.public_key();
+
+        let message = b"Settlement: T-Mobile 1.2M EUR -> Vodafone, Vodafone 800K EUR -> Orange";
+
+        // Each operator signs the settlement
+        let tmobile_sig = tmobile_sk.sign(message).unwrap();
+        let vodafone_sig = vodafone_sk.sign(message).unwrap();
+        let orange_sig = orange_sk.sign(message).unwrap();
+
+        // Aggregate signatures
+        let signatures = vec![tmobile_sig, vodafone_sig, orange_sig];
+        let aggregate_sig = aggregate_signatures(&signatures).unwrap();
+
+        // Aggregate public keys
+        let public_keys = vec![tmobile_pk, vodafone_pk, orange_pk];
+        let aggregate_pk = aggregate_public_keys(&public_keys).unwrap();
+
+        // Verify aggregate signature
+        assert!(aggregate_sig.verify(&aggregate_pk, message).unwrap());
+
+        // Should fail with wrong message
+        assert!(!aggregate_sig.verify(&aggregate_pk, b"Wrong message").unwrap());
     }
 
     #[test]
-    fn test_signature_aggregation() {
-        let private_key1 = PrivateKey::generate().unwrap();
-        let private_key2 = PrivateKey::generate().unwrap();
-        
-        let public_key1 = private_key1.public_key().unwrap();
-        let public_key2 = private_key2.public_key().unwrap();
-        
-        let message_hash = hash_data(b"aggregate signature test");
-        
-        let signature1 = private_key1.sign(&message_hash).unwrap();
-        let signature2 = private_key2.sign(&message_hash).unwrap();
-        
-        let agg_signature = AggregateSignature::aggregate(&[signature1, signature2]).unwrap();
-        let agg_public_key = AggregatePublicKey::aggregate(&[public_key1, public_key2]).unwrap();
-        
-        assert!(agg_public_key.verify(&agg_signature, &message_hash));
-    }
+    fn test_sp_consortium_workflow() {
+        let mut verifier = BLSVerifier::new();
 
-    #[test]
-    fn test_compressed_keys() {
-        let private_key = PrivateKey::generate().unwrap();
-        let public_key = private_key.public_key().unwrap();
-        
-        let compressed = public_key.compress();
-        let decompressed = compressed.decompress().unwrap();
-        
-        assert_eq!(public_key, decompressed);
-    }
+        // Generate keys for SP operators
+        let tmobile_sk = BLSPrivateKey::generate().unwrap();
+        let vodafone_sk = BLSPrivateKey::generate().unwrap();
+        let orange_sk = BLSPrivateKey::generate().unwrap();
 
-    #[test]
-    fn test_invalid_key_bytes() {
-        // Test invalid private key length
-        let result = PrivateKey::from_bytes(&[1, 2, 3]);
-        assert!(matches!(result, Err(CryptoError::InvalidPrivateKey)));
-        
-        // Test zero private key
-        let result = PrivateKey::from_bytes(&[0u8; 32]);
-        assert!(matches!(result, Err(CryptoError::InvalidPrivateKey)));
-        
-        // Test invalid public key length
-        let result = PublicKey::from_bytes(&[1, 2, 3]);
-        assert!(matches!(result, Err(CryptoError::InvalidPublicKey)));
+        // Register operators
+        verifier.register_operator("T-Mobile-DE", tmobile_sk.public_key());
+        verifier.register_operator("Vodafone-UK", vodafone_sk.public_key());
+        verifier.register_operator("Orange-FR", orange_sk.public_key());
+
+        let settlement_data = b"CDR_Settlement_Batch_12345: Total 2.4M EUR cross-network charges";
+
+        // Each operator signs
+        let tmobile_sig = tmobile_sk.sign(settlement_data).unwrap();
+        let vodafone_sig = vodafone_sk.sign(settlement_data).unwrap();
+        let orange_sig = orange_sk.sign(settlement_data).unwrap();
+
+        // Verify individual signatures
+        assert!(verifier.verify_operator_signature("T-Mobile-DE", settlement_data, tmobile_sig.to_bytes()).unwrap());
+        assert!(verifier.verify_operator_signature("Vodafone-UK", settlement_data, vodafone_sig.to_bytes()).unwrap());
+        assert!(verifier.verify_operator_signature("Orange-FR", settlement_data, orange_sig.to_bytes()).unwrap());
+
+        // Create aggregate signature for consensus
+        let signatures = vec![tmobile_sig, vodafone_sig, orange_sig];
+        let aggregate_sig = aggregate_signatures(&signatures).unwrap();
+
+        // Verify multi-party signature
+        let operators = vec!["T-Mobile-DE".to_string(), "Vodafone-UK".to_string(), "Orange-FR".to_string()];
+        assert!(verifier.verify_multi_party_signature(&operators, settlement_data, aggregate_sig.to_bytes()).unwrap());
+
+        println!("✅ SP Consortium BLS workflow test passed!");
     }
 }

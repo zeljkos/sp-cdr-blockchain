@@ -21,7 +21,7 @@ impl KeyPair {
     /// Generate a new key pair
     pub fn generate() -> Result<Self> {
         let private_key = PrivateKey::generate()?;
-        let public_key = private_key.public_key()?;
+        let public_key = private_key.public_key();
         let key_id = Self::compute_key_id(&public_key);
 
         Ok(Self {
@@ -33,7 +33,7 @@ impl KeyPair {
 
     /// Create key pair from existing private key
     pub fn from_private_key(private_key: PrivateKey) -> Result<Self> {
-        let public_key = private_key.public_key()?;
+        let public_key = private_key.public_key();
         let key_id = Self::compute_key_id(&public_key);
 
         Ok(Self {
@@ -61,13 +61,13 @@ impl KeyPair {
     /// Sign a message with this key pair
     pub fn sign(&self, message: &[u8]) -> Result<super::Signature> {
         let message_hash = hash_data(message);
-        self.private_key.sign(&message_hash)
+        self.private_key.sign(message_hash.as_bytes())
     }
 
     /// Verify a signature with this key pair's public key
     pub fn verify(&self, signature: &super::Signature, message: &[u8]) -> bool {
         let message_hash = hash_data(message);
-        self.public_key.verify(signature, &message_hash)
+        self.public_key.verify(signature, message_hash.as_bytes())
     }
 }
 

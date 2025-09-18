@@ -1,0 +1,197 @@
+version: '3.8'
+
+# Multi-Party Trusted Setup Ceremony Simulation
+# Emulates distributed ceremony with container-based telecom operators
+
+services:
+  # Ceremony Coordinator
+  setup-coordinator:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: sp-setup-coordinator
+    ports:
+      - "9000:9000"  # Ceremony coordination API
+    volumes:
+      - ./ceremony_data/coordinator:/app/ceremony
+      - ./ceremony_data/shared:/app/shared  # Shared ceremony state
+    environment:
+      - RUST_LOG=info
+      - CEREMONY_ROLE=coordinator
+      - PARTICIPANTS=tmobile-de,vodafone-uk,orange-fr
+      - MIN_PARTICIPANTS=3
+      - CEREMONY_TIMEOUT=3600  # 1 hour for demo
+    command: >
+      sh -c "
+      echo '🎭 Starting Trusted Setup Ceremony Coordinator' &&
+      mkdir -p /app/ceremony /app/shared &&
+      ./target/release/trusted-setup-demo --role coordinator
+      --participants tmobile-de,vodafone-uk,orange-fr
+      --ceremony-dir /app/ceremony
+      --shared-dir /app/shared
+      --bind 0.0.0.0:9000
+      "
+    networks:
+      setup_ceremony_net:
+        ipv4_address: 172.40.0.10
+    restart: unless-stopped
+
+  # T-Mobile Germany Participant
+  participant-tmobile:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: sp-participant-tmobile
+    ports:
+      - "9001:9001"
+    volumes:
+      - ./ceremony_data/tmobile:/app/participant
+      - ./ceremony_data/shared:/app/shared
+    environment:
+      - RUST_LOG=info
+      - CEREMONY_ROLE=participant
+      - PARTICIPANT_ID=tmobile-de
+      - COORDINATOR_URL=http://setup-coordinator:9000
+      - OPERATOR_NAME="T-Mobile Deutschland"
+      - COUNTRY_CODE=DE
+    command: >
+      sh -c "
+      echo '🇩🇪 T-Mobile Deutschland joining ceremony...' &&
+      sleep 10 &&
+      mkdir -p /app/participant &&
+      ./target/release/trusted-setup-demo --role participant
+      --participant-id tmobile-de
+      --coordinator-url http://setup-coordinator:9000
+      --participant-dir /app/participant
+      --shared-dir /app/shared
+      --bind 0.0.0.0:9001
+      "
+    depends_on:
+      - setup-coordinator
+    networks:
+      setup_ceremony_net:
+        ipv4_address: 172.40.0.11
+    restart: unless-stopped
+
+  # Vodafone UK Participant
+  participant-vodafone:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: sp-participant-vodafone
+    ports:
+      - "9002:9002"
+    volumes:
+      - ./ceremony_data/vodafone:/app/participant
+      - ./ceremony_data/shared:/app/shared
+    environment:
+      - RUST_LOG=info
+      - CEREMONY_ROLE=participant
+      - PARTICIPANT_ID=vodafone-uk
+      - COORDINATOR_URL=http://setup-coordinator:9000
+      - OPERATOR_NAME="Vodafone Group UK"
+      - COUNTRY_CODE=GB
+    command: >
+      sh -c "
+      echo '🇬🇧 Vodafone UK joining ceremony...' &&
+      sleep 15 &&
+      mkdir -p /app/participant &&
+      ./target/release/trusted-setup-demo --role participant
+      --participant-id vodafone-uk
+      --coordinator-url http://setup-coordinator:9000
+      --participant-dir /app/participant
+      --shared-dir /app/shared
+      --bind 0.0.0.0:9002
+      "
+    depends_on:
+      - setup-coordinator
+    networks:
+      setup_ceremony_net:
+        ipv4_address: 172.40.0.12
+    restart: unless-stopped
+
+  # Orange France Participant
+  participant-orange:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: sp-participant-orange
+    ports:
+      - "9003:9003"
+    volumes:
+      - ./ceremony_data/orange:/app/participant
+      - ./ceremony_data/shared:/app/shared
+    environment:
+      - RUST_LOG=info
+      - CEREMONY_ROLE=participant
+      - PARTICIPANT_ID=orange-fr
+      - COORDINATOR_URL=http://setup-coordinator:9000
+      - OPERATOR_NAME="Orange France"
+      - COUNTRY_CODE=FR
+    command: >
+      sh -c "
+      echo '🇫🇷 Orange France joining ceremony...' &&
+      sleep 20 &&
+      mkdir -p /app/participant &&
+      ./target/release/trusted-setup-demo --role participant
+      --participant-id orange-fr
+      --coordinator-url http://setup-coordinator:9000
+      --participant-dir /app/participant
+      --shared-dir /app/shared
+      --bind 0.0.0.0:9003
+      "
+    depends_on:
+      - setup-coordinator
+    networks:
+      setup_ceremony_net:
+        ipv4_address: 172.40.0.13
+    restart: unless-stopped
+
+  # External Verifier (simulates independent auditor)
+  ceremony-verifier:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: sp-ceremony-verifier
+    ports:
+      - "9010:9010"
+    volumes:
+      - ./ceremony_data/verifier:/app/verifier
+      - ./ceremony_data/shared:/app/shared:ro  # Read-only access
+    environment:
+      - RUST_LOG=info
+      - CEREMONY_ROLE=verifier
+      - COORDINATOR_URL=http://setup-coordinator:9000
+    command: >
+      sh -c "
+      echo '🔍 Independent Ceremony Verifier starting...' &&
+      sleep 30 &&
+      mkdir -p /app/verifier &&
+      ./target/release/trusted-setup-demo --role verifier
+      --coordinator-url http://setup-coordinator:9000
+      --verifier-dir /app/verifier
+      --shared-dir /app/shared
+      --bind 0.0.0.0:9010
+      "
+    depends_on:
+      - participant-tmobile
+      - participant-vodafone
+      - participant-orange
+    networks:
+      setup_ceremony_net:
+        ipv4_address: 172.40.0.20
+    restart: unless-stopped
+
+networks:
+  setup_ceremony_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.40.0.0/16
+
+volumes:
+  ceremony-coordinator-data:
+  ceremony-tmobile-data:
+  ceremony-vodafone-data:
+  ceremony-orange-data:
+  ceremony-shared-data:

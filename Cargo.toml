@@ -16,13 +16,17 @@ name = "trusted-setup-demo"
 path = "src/bin/trusted_setup_demo.rs"
 
 [[bin]]
-name = "cdr-pipeline-demo"
-path = "src/bin/cdr_pipeline_demo.rs"
+name = "bce-pipeline-demo"
+path = "src/bin/bce_pipeline_demo.rs"
 
 
 [[bin]]
 name = "test-real-crypto"
 path = "tests/util/test_real_crypto.rs"
+
+[[bin]]
+name = "bce-api-server"
+path = "src/bin/bce_api_server.rs"
 
 [dependencies]
 # Core async runtime
@@ -36,10 +40,11 @@ serde_json = "1.0"
 
 # Cryptography (from albatross)
 sha2 = "0.10"
-hex = "0.4"
+hex = { version = "0.4", features = ["serde"] }
 ed25519-dalek = "2.0"
 rand = "0.8"
 getrandom = "0.2"
+blst = "0.3"  # Real BLS12-381 signatures
 
 # ZK proofs (updated to compatible versions)
 ark-ec = "0.4"
@@ -75,6 +80,7 @@ tracing-subscriber = "0.3"
 log = "0.4"
 clap = { version = "4.0", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
+warp = "0.3"  # HTTP API server
 uuid = { version = "1.0", features = ["v4"] }
 ark-poly = "0.5.0"
 ark-poly-commit = "0.5.0"

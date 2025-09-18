@@ -10,6 +10,44 @@ use std::path::PathBuf;
 use crate::primitives::{Result, BlockchainError, Blake2bHash};
 use crate::zkp::trusted_setup::TrustedSetupCeremony;
 
+/// CDR Privacy Proof - proves CDR data validity without revealing content
+pub type CDRPrivacyProof = Proof<Bn254>;
+
+/// Settlement Proof - proves settlement calculations are correct
+pub type SettlementProof = Proof<Bn254>;
+
+/// CDR data that needs to be proven privately
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CDRPrivateData {
+    pub call_duration_minutes: u32,
+    pub data_usage_mb: u64,
+    pub sms_count: u16,
+    pub roaming_charges: u64, // in cents
+    pub home_network_id: String,
+    pub visited_network_id: String,
+    pub subscriber_hash: Blake2bHash, // Hashed IMSI for privacy
+}
+
+/// Public inputs for CDR privacy proof
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CDRPublicInputs {
+    pub record_hash: Blake2bHash,
+    pub network_pair_hash: Blake2bHash,
+    pub timestamp_range_hash: Blake2bHash,
+    pub total_charge_commitment: Blake2bHash, // Commitment to total charges
+}
+
+/// Settlement calculation inputs
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SettlementInputs {
+    pub creditor_network: String,
+    pub debtor_network: String,
+    pub period: String,
+    pub total_charges: u64, // Sum of all CDR charges
+    pub exchange_rate: u32, // Fixed point representation
+    pub settlement_amount: u64, // Final settlement amount
+}
+
 /// Albatross-style ZK proof verifier with real implementation
 pub struct AlbatrossZKVerifier {
     settlement_vk: Option<VerifyingKey<Bn254>>,

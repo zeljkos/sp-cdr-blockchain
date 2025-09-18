@@ -199,7 +199,7 @@ impl NetworkSignature {
 
     /// Verify network signature
     pub fn verify(&self, message: &[u8]) -> bool {
-        self.public_key.verify(&self.signature, &hash_data(message))
+        self.public_key.verify(&self.signature, hash_data(message).as_bytes())
     }
 
     /// Check if signature is within valid time window
